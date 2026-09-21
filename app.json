@@ -1,25 +1,56 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "VenSure",
+    "slug": "vensure",
     "version": "1.0.0",
+    "scheme": "vensure",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ventureholding.vensure",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.ventureholding.vensure",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#030f26",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "backgroundColor": "#030f26"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "expo-web-browser",
+      "expo-document-picker",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#030f26",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "",
+      "appEnv": "",
+      "eas": {
+        "projectId": "703c7250-5287-4583-af6b-49867524d342"
+      }
+    },
+    "owner": "venture-holding-limited"
   }
 }
