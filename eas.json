@@ -26,13 +26,25 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://uat-api-vensure.ventureholdingltd.com/api"
       }
     },
+    "production-apk": {
+      "environment": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api-vensure.ventureholdingltd.com/api"
+      }
+    },
     "production": {
       "environment": "production",
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api-vensure.ventureholdingltd.com/api"
       }
     }
   }

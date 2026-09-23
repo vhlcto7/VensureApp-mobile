@@ -191,7 +191,7 @@ export function QuotesScreen({ navigation }: QuotesScreenProps) {
           ) : error ? null : (
             <ListEmptyState
               title="No quotes yet"
-              message="Generated quotes are grouped so you can compare insurers from the same request."
+              message="Generate a new  quote & get your best deal for today !"
               actionLabel="Get a Quote"
               onAction={() => navigation.navigate('MotorQuote')}
             />

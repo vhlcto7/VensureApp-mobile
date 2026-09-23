@@ -1,7 +1,7 @@
 /**
  * extra.apiBaseUrl is taken only from EXPO_PUBLIC_API_BASE_URL.
  * Do not default this to UAT, localhost, or a LAN address.
- * Production builds must set EXPO_PUBLIC_API_BASE_URL in the EAS production environment.
+ * Production EAS profiles set EXPO_PUBLIC_API_BASE_URL to the production NestJS API, including /api.
  */
 function assertProductionApiBaseUrl(appEnv, apiBaseUrl) {
   if (String(appEnv || '').trim().toLowerCase() !== 'production') {

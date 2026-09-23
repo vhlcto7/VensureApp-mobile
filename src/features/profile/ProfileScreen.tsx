@@ -5,6 +5,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button, Card, ScreenContainer } from '../../components';
 import { APP_VERSION } from '../../config/env';
+import {
+  VENSURE_ACCOUNT_DELETION_URL,
+  VENSURE_PRIVACY_POLICY_URL,
+  VENSURE_TERMS_URL,
+} from '../../constants/legal-urls';
 import type { CustomerTabScreenProps } from '../../navigation/types';
 import { getCustomerSignupConsents } from '../../services/customer-auth';
 import { getCustomerProfile } from '../../services/customer-profile';
@@ -16,6 +21,7 @@ import { DashboardIcon } from '../dashboard/DashboardIcon';
 import { KycDocumentsSection } from './KycDocumentsSection';
 import { MobileChangeSection } from './MobileChangeSection';
 import { PasswordChangeSection } from './PasswordChangeSection';
+import { DeleteAccountSection } from './DeleteAccountSection';
 import { identityTypeLabel } from './helpers';
 import type { CustomerProfileRecord } from './types';
 
@@ -182,13 +188,52 @@ export function ProfileScreen(_props: CustomerTabScreenProps<'Profile'>) {
 
       <KycDocumentsSection customerType={display.customerType} />
 
+      <DeleteAccountSection
+        onClosed={() => {
+          void signOut();
+        }}
+      />
+
       <Card>
         <Text style={styles.sectionTitle}>Legal & Privacy</Text>
         <Text style={[styles.muted, styles.actionLede]}>
           {legalDocument
             ? `${legalDocument.title}${legalDocument.version ? ` · Version ${legalDocument.version}` : ''}`
-            : 'VenSure publishes a single Customer Legal Agreement covering Terms and Privacy.'}
+            : 'Review VenSure privacy, terms and account deletion information.'}
         </Text>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Open Privacy Policy"
+          onPress={() => {
+            void Linking.openURL(VENSURE_PRIVACY_POLICY_URL);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.legalLink, pressed ? styles.pressed : null]}
+        >
+          <Text style={styles.legalLinkText}>Privacy Policy</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Open Terms and Conditions"
+          onPress={() => {
+            void Linking.openURL(VENSURE_TERMS_URL);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.legalLink, pressed ? styles.pressed : null]}
+        >
+          <Text style={styles.legalLinkText}>Terms & Conditions</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Open Account Deletion Information"
+          onPress={() => {
+            void Linking.openURL(VENSURE_ACCOUNT_DELETION_URL);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.legalLink, pressed ? styles.pressed : null]}
+        >
+          <Text style={styles.legalLinkText}>Account Deletion Information</Text>
+        </Pressable>
         {legalDocument?.viewUrl ? (
           <Pressable
             accessibilityRole="link"
@@ -204,9 +249,7 @@ export function ProfileScreen(_props: CustomerTabScreenProps<'Profile'>) {
           >
             <Text style={styles.legalLinkText}>View Customer Legal Agreement</Text>
           </Pressable>
-        ) : (
-          <Text style={styles.muted}>Legal document is not available right now.</Text>
-        )}
+        ) : null}
       </Card>
 
       <Text style={styles.appVersion} accessibilityLabel={`VenSure version ${APP_VERSION}`}>

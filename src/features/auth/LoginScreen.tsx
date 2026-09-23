@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -23,9 +24,11 @@ import type { AuthStackScreenProps } from '../../navigation/types';
 import { loginCustomer, sendCustomerLoginOtp } from '../../services/customer-auth';
 import { useAuth } from '../../store/auth-context';
 import { savePendingOtp } from '../../store/otp-challenge';
+import { prefillSignupDraft } from '../../store/signup-draft';
 import { colors, spacing, typography } from '../../theme';
 import type { CustomerLoginForm } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
+import { isCustomerAccountNotFound } from '../../utils/signup-errors';
 import { getMobileValidationError } from '../../utils/validation';
 
 type LoginScreenProps = AuthStackScreenProps<'Login'>;
@@ -84,6 +87,19 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       const session = await loginCustomer(form);
       await signIn(session);
     } catch (error) {
+      if (isCustomerAccountNotFound(error)) {
+        showAccountNotFoundAlert(
+          getErrorMessage(
+            error,
+            'No VenSure account was found with this email address. Please create an account to continue.',
+          ),
+          form.emailOrMobile.includes('@')
+            ? { email: form.emailOrMobile }
+            : { mobileNumber: form.emailOrMobile },
+          navigation,
+        );
+        return;
+      }
       setSubmitError(getErrorMessage(error, 'Unable to sign in.'));
     } finally {
       setSubmitting(false);
@@ -110,6 +126,17 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       });
       navigation.navigate('OtpVerification');
     } catch (error) {
+      if (isCustomerAccountNotFound(error)) {
+        showAccountNotFoundAlert(
+          getErrorMessage(
+            error,
+            'No VenSure account was found with this mobile number. Please create an account to continue.',
+          ),
+          { mobileNumber },
+          navigation,
+        );
+        return;
+      }
       setSubmitError(getErrorMessage(error, 'Unable to send login OTP.'));
     } finally {
       setSubmitting(false);
@@ -300,6 +327,23 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function showAccountNotFoundAlert(
+  message: string,
+  prefill: { email?: string; mobileNumber?: string },
+  navigation: LoginScreenProps['navigation'],
+) {
+  Alert.alert('Account Not Found', message, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Create Account',
+      onPress: () => {
+        prefillSignupDraft(prefill);
+        navigation.navigate('SignUp');
+      },
+    },
+  ]);
 }
 
 function BenefitIcon({ kind }: { kind: BenefitKind }) {

@@ -74,3 +74,13 @@ export function isProfileReviewRequired(error: unknown): boolean {
 
   return getErrorMessage(error, '').toUpperCase().includes('PROFILE_REVIEW_REQUIRED');
 }
+
+export function isCustomerAccountNotFound(error: unknown): boolean {
+  if (isApiError(error) && error.code === 'CUSTOMER_ACCOUNT_NOT_FOUND') {
+    return true;
+  }
+
+  return getErrorMessage(error, '')
+    .toUpperCase()
+    .includes('NO VENSURE ACCOUNT WAS FOUND');
+}
