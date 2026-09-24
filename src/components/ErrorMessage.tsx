@@ -6,7 +6,7 @@ type ErrorMessageProps = {
   title?: string;
 };
 
-export function ErrorMessage({ message, title = 'Something went wrong' }: ErrorMessageProps) {
+export function ErrorMessage({ message, title = 'Unable to continue' }: ErrorMessageProps) {
   useEffect(() => {
     const text = message?.trim();
     if (!text) return;

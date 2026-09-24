@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -98,7 +99,7 @@ const RTSA_DATE_LABELS = new Set([
 const STEP_COPY: Record<MotorStep, { title: string; description: string }> = {
   lookup: {
     title: 'Vehicle lookup',
-    description: 'Start with the registration number and we will try RTSA first.',
+    description: 'Start with the registration number (XXX1234 or XXX123ZM)',
   },
   vehicle: {
     title: 'Confirm vehicle details',
@@ -436,6 +437,25 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     await applyPrefill(selectedSavedId);
   };
 
+  const showRtsaLookupFailure = (message: string) => {
+    Alert.alert('Vehicle lookup', message, [
+      {
+        text: 'Try again',
+        onPress: () => {
+          setLookupError('');
+          setStep('lookup');
+        },
+      },
+      {
+        text: 'OK',
+        onPress: () => {
+          setLookupError(message);
+          setStep('vehicle');
+        },
+      },
+    ]);
+  };
+
   const handleLookup = async () => {
     const normalized = normalizeVehicleLookupNumber(values.registrationNumber);
     if (!normalized) {
@@ -463,10 +483,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
           isRtsaVerified: false,
           rtsaVehicle: undefined,
         }));
-        setLookupError(
-          'Vehicle details could not be retrieved from RTSA. Please enter the vehicle details manually.',
+        showRtsaLookupFailure(
+          'Vehicle could not be retrieved from RTSA. Please enter the vehicle details manually.',
         );
-        setStep('vehicle');
         return;
       }
       setValues((current) => ({
@@ -504,12 +523,11 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
         isRtsaVerified: false,
         rtsaVehicle: undefined,
       }));
-      setLookupError(
+      showRtsaLookupFailure(
         error instanceof RtsaLookupError
           ? error.message
-          : 'Vehicle details could not be found from RTSA. You may enter the details manually.',
+          : 'Vehicle could not be retrieved from RTSA. Please enter the vehicle details manually.',
       );
-      setStep('vehicle');
     } finally {
       setLookupLoading(false);
     }
@@ -681,11 +699,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
               {!API_BASE_URL.trim() ? (
                 <ErrorMessage message="API base URL is not configured. Set EXPO_PUBLIC_API_BASE_URL in mobile/.env, then stop Expo and run npx expo start --clear." />
               ) : null}
-              {lookupError ? <ErrorMessage message={lookupError} /> : (
-                <Text style={styles.helper}>
-                  We'll try RTSA first, then you can switch to manual entry if needed.
-                </Text>
-              )}
+              <Text style={styles.helper}>
+                We'll try RTSA first, then you can switch to manual entry if needed.
+              </Text>
               <Pressable onPress={() => setStep('vehicle')} hitSlop={12} style={styles.linkButton}>
                 <Text style={styles.link}>Enter details manually / New vehicle</Text>
               </Pressable>
@@ -701,7 +717,6 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
 
           {step === 'vehicle' ? (
             <View style={styles.section}>
-              {lookupError ? <ErrorMessage message={lookupError} /> : null}
               {values.isRtsaVerified && values.rtsaVehicle ? (
                 <Card>
                   <Text style={styles.verified}>RTSA match found</Text>
@@ -736,11 +751,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                     ),
                   )}
                 </Card>
-              ) : lookupError ? null : (
-                <Text style={styles.manualBanner}>
-                  Vehicle could not be retrieved from RTSA. Please enter vehicle details manually.
-                </Text>
-              )}
+              ) : lookupError ? (
+                <Text style={styles.manualBanner}>{lookupError}</Text>
+              ) : null}
               {visibleFields.includes('registrationNumber') ? (
                 <Input
                   label="Registration Number (optional for new vehicles)"

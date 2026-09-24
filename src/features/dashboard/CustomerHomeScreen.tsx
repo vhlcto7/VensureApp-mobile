@@ -160,7 +160,7 @@ export function CustomerHomeScreen({ navigation }: CustomerHomeScreenProps) {
 
       {error ? (
         <View style={styles.errorBlock}>
-          <ErrorMessage message={error} />
+          <ErrorMessage title="Unable to load Home" message={error} />
           <Button label="Retry" variant="outline" onPress={() => void loadDashboard()} />
         </View>
       ) : null}
