@@ -1,8 +1,9 @@
-import type { ComponentProps } from 'react';
+import { useEffect, type ComponentProps } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,7 +18,10 @@ import { QuoteDetailsScreen } from '../features/quote/QuoteDetailsScreen';
 import { QuotePaymentScreen } from '../features/quote/QuotePaymentScreen';
 import { QuotePurchaseSuccessScreen } from '../features/quote/QuotePurchaseSuccessScreen';
 import { QuoteResultsScreen } from '../features/quote/QuoteResultsScreen';
+import { resolveInterruptedPurchaseResume } from '../features/quote/resume-interrupted-purchase';
 import { QuoteReviewScreen } from '../features/quote/QuoteReviewScreen';
+import { useAuth } from '../store/auth-context';
+import { consumePurchaseResumeForUser } from '../store/purchase-state';
 import { CustomerQuoteDetailsScreen } from '../features/quotes/CustomerQuoteDetailsScreen';
 import { QuotesScreen } from '../features/quotes/QuotesScreen';
 import { VehicleAddScreen } from '../features/vehicles/VehicleAddScreen';
@@ -39,6 +43,35 @@ const TAB_ICONS: Record<
   Payments: { default: 'card-outline', focused: 'card' },
   Profile: { default: 'person-outline', focused: 'person' },
 };
+
+function CustomerTabsWithPurchaseResume() {
+  const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
+  const { session } = useAuth();
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId || !consumePurchaseResumeForUser(userId)) {
+      return;
+    }
+
+    let cancelled = false;
+    void resolveInterruptedPurchaseResume().then((result) => {
+      if (cancelled || result.action !== 'resume') {
+        return;
+      }
+      navigation.navigate('QuotePayment', {
+        quoteId: result.quoteId,
+        transactionRef: result.transactionRef,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigation, session?.user.id]);
+
+  return <CustomerTabs />;
+}
 
 function CustomerTabs() {
   const insets = useSafeAreaInsets();
@@ -98,7 +131,7 @@ export function CustomerNavigator() {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="CustomerTabs" component={CustomerTabs} />
+      <Stack.Screen name="CustomerTabs" component={CustomerTabsWithPurchaseResume} />
       <Stack.Screen name="Vehicles" component={VehiclesScreen} />
       <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
       <Stack.Screen name="VehicleAdd" component={VehicleAddScreen} />

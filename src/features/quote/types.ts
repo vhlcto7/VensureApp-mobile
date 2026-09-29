@@ -181,6 +181,12 @@ export type QuoteResultItem = {
   paymentFee?: number;
   badge?: 'Best Price' | 'Recommended' | 'Popular';
   quoteRequestId?: string;
+  vehicleRegistrationNumber?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+  vehicleColour?: string;
+  vehicleUse?: string;
   policyWordingDocumentId?: string;
   keyFactStatementDocumentId?: string;
   benefits: string[];

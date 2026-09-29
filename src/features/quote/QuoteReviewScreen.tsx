@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -70,6 +70,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
   const [openingDoc, setOpeningDoc] = useState('');
   const [preview, setPreview] = useState<CustomerDocumentFile | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const paymentStartInFlightRef = useRef(false);
 
   useEffect(() => {
     void savePendingPurchase({
@@ -114,6 +115,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
 
   useFocusEffect(
     useCallback(() => {
+      paymentStartInFlightRef.current = false;
       void load();
     }, [load]),
   );
@@ -221,27 +223,38 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
   }
 
   async function startPayment() {
+    if (paymentStartInFlightRef.current) return;
+    paymentStartInFlightRef.current = true;
+
     if (!session?.user) {
       await savePendingPurchase({ quoteId, quoteRequestId: getGuestQuoteSession()?.quoteRequestId });
+      paymentStartInFlightRef.current = false;
       navigation.navigate('Login');
       return;
     }
-    if (amountError) return;
+    if (amountError) {
+      paymentStartInFlightRef.current = false;
+      return;
+    }
     if (!settings?.mobileMoneyEnabled && !settings?.cardEnabled) {
+      paymentStartInFlightRef.current = false;
       setError('No payment methods are currently enabled.');
       return;
     }
     if (summary && !summary.paymentAllowed) {
+      paymentStartInFlightRef.current = false;
       setError(summary.reason || 'This quote is not ready for payment.');
       return;
     }
     const wordingId = summary?.policyWording?.id;
     const keyFactsId = summary?.keyFacts?.id;
     if (!wordingId || !keyFactsId) {
+      paymentStartInFlightRef.current = false;
       setError('Key Facts and Policy Wording must be available before payment.');
       return;
     }
     if (summary?.documentConsentRequired && !accepted) {
+      paymentStartInFlightRef.current = false;
       setError('Please confirm that you have reviewed the Key Facts and Policy Wording.');
       return;
     }
@@ -261,6 +274,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
         roundMoney(Number(checkout.totalAmount)) !== roundMoney(Number(totalPayable))
       ) {
         setAmountError('Unable to confirm payment amount. Please refresh your quote.');
+        paymentStartInFlightRef.current = false;
         return;
       }
       await saveCheckoutState({
@@ -271,6 +285,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
       });
       navigation.navigate('QuotePayment', { quoteId, transactionRef: checkout.transactionRef });
     } catch (payError) {
+      paymentStartInFlightRef.current = false;
       setError(getErrorMessage(payError, 'Payment could not be started. Please try again.'));
     } finally {
       setPaying(false);

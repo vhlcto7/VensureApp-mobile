@@ -16,6 +16,7 @@ import {
   saveCustomerUser,
 } from '../services/secure-storage';
 import type { CustomerAuthSession, CustomerAuthUser } from '../types';
+import { restorePurchaseState } from './purchase-state';
 import { clearCustomerSessionState } from './clear-customer-session';
 import { clearPendingOtp } from './otp-challenge';
 import { clearSignupDraft } from './signup-draft';
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveCustomerUser(nextSession.user);
     clearPendingOtp();
     clearSignupDraft();
+    await restorePurchaseState();
     setSession(nextSession);
     setStatus('signedIn');
   }, []);
@@ -75,6 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (accessToken && user) {
+          await restorePurchaseState();
+          if (cancelled) {
+            return;
+          }
           setSession({ accessToken, user });
           setStatus('signedIn');
           return;

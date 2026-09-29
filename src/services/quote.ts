@@ -517,6 +517,7 @@ export async function getQuotesByQuoteRequestId(
 
   return asArray(unwrap(data)).map((item) => {
     const record = asRecord(item);
+    const vehicle = asRecord(record.vehicle);
     const breakdown = asRecord(record.premiumBreakdown ?? record.premium_breakdown);
     const details = asRecord(record.insurer_response ?? record.insurerResponse);
     const nestedCompany = asRecord(record.insurance_companies ?? record.insuranceCompany);
@@ -656,6 +657,28 @@ export async function getQuotesByQuoteRequestId(
       paymentFee: readNumber(breakdown.paymentFee, record.paymentFee, record.paymentProcessingFee),
       badge: readQuoteBadge(record.badge),
       quoteRequestId: readString(record.quoteRequestId, record.quote_request_id) || undefined,
+      vehicleRegistrationNumber:
+        readString(
+          vehicle.registrationNumber,
+          vehicle.registration_number,
+          vehicle.plate_number,
+          record.vehicleRegistrationNumber,
+          record.registrationNumber,
+        ) || undefined,
+      vehicleMake: readString(vehicle.make, record.vehicleMake, record.make) || undefined,
+      vehicleModel: readString(vehicle.model, record.vehicleModel, record.model) || undefined,
+      vehicleYear:
+        readString(
+          vehicle.year,
+          vehicle.yearOfManufacture,
+          vehicle.year_of_manufacture,
+          record.vehicleYear,
+        ) || undefined,
+      vehicleColour:
+        readString(vehicle.colour, vehicle.color, record.vehicleColour, record.colour) || undefined,
+      vehicleUse:
+        readString(vehicle.vehicleUse, vehicle.vehicle_use, record.vehicleUse, record.policyType) ||
+        undefined,
       policyWordingDocumentId:
         readString(
           asRecord(record.policyWordingDocument).id,

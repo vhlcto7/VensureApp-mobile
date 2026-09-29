@@ -202,6 +202,7 @@ function asArray(value: unknown): unknown[] {
 function readString(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   }
   return '';
 }
@@ -669,9 +670,15 @@ function mapQuote(item: unknown): CustomerQuoteRecord {
       vehicle.registrationNumber,
       vehicle.plate_number,
     ),
-    vehicleMake: readString(vehicle.make, record.vehicleMake) || undefined,
-    vehicleModel: readString(vehicle.model, record.vehicleModel) || undefined,
-    vehicleYear: readString(vehicle.year, record.vehicleYear) || undefined,
+    vehicleMake: readString(vehicle.make, record.vehicleMake, record.make) || undefined,
+    vehicleModel: readString(vehicle.model, record.vehicleModel, record.model) || undefined,
+    vehicleYear:
+      readString(
+        vehicle.year,
+        vehicle.yearOfManufacture,
+        vehicle.year_of_manufacture,
+        record.vehicleYear,
+      ) || undefined,
     vehicleUse: readString(record.policyType, product.policyType, record.productGroupLabel) || undefined,
     coverType: readString(record.coverType, product.coverType, record.coverTypeSummary),
     insurerName: readString(record.insurerName, insurer.name) || 'Insurer',

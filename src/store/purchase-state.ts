@@ -21,6 +21,7 @@ const tokenOptions: SecureStore.SecureStoreOptions = {
 
 let pendingPurchase: PendingPurchase | null = null;
 let checkoutState: GeePayCheckoutState | null = null;
+let purchaseResumeConsumedForUser: string | null = null;
 
 async function writeJson(key: string, value: object | null) {
   if (!value) {
@@ -75,4 +76,16 @@ export async function restorePurchaseState() {
   pendingPurchase = parseJson<PendingPurchase>(pendingRaw);
   checkoutState = parseJson<GeePayCheckoutState>(checkoutRaw);
   return { pendingPurchase, checkoutState };
+}
+
+export function resetPurchaseResumeGuard() {
+  purchaseResumeConsumedForUser = null;
+}
+
+export function consumePurchaseResumeForUser(userId: string) {
+  if (!userId || purchaseResumeConsumedForUser === userId) {
+    return false;
+  }
+  purchaseResumeConsumedForUser = userId;
+  return true;
 }
