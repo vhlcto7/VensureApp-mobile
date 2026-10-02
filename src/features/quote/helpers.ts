@@ -7,8 +7,19 @@ import type {
   PolicyProductType,
   RTSAVehicleLookupResult,
 } from './types';
+import {
+  calculateRtsaAnniversaryQuarterOptions,
+  type RtsaAnniversaryQuarterOptions,
+} from './rtsa/rtsa-anniversary-quarters';
 
 const UNAVAILABLE = new Set(['', 'NA', 'N/A', 'NAN', 'NOT AVAILABLE']);
+const ANNIVERSARY_QUARTER_KEYS = new Set([
+  'QUARTER1',
+  'QUARTER2',
+  'QUARTER3',
+  'QUARTER4',
+  'QUARTER5',
+]);
 
 export function getTodayDateString(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -107,11 +118,24 @@ export function getDurationMonths(policyDuration?: string | null) {
   }
 }
 
+/**
+ * Manual Duration end date: start + N months − 1 calendar day.
+ * Uses UTC date parts only so local midnight + toISOString cannot shift the day.
+ */
 export function addMonthsToDateString(startDate: string, months: number) {
-  const date = new Date(`${startDate}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return '';
-  date.setMonth(date.getMonth() + months);
-  date.setDate(date.getDate() - 1);
+  const normalized = toIsoDateString(startDate) || startDate.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) return '';
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || !Number.isInteger(day)) {
+    return '';
+  }
+
+  const date = new Date(Date.UTC(year, monthIndex + months, day));
+  date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
 }
 
@@ -123,7 +147,26 @@ export function getCoverDayCount(startDate: string, endDate: string) {
 }
 
 export function getPolicyDurationLabel(value?: string | null) {
-  switch (value) {
+  if (!value?.trim()) {
+    return '';
+  }
+
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_')
+    .replace(/^QUARTER[_\s-]?(\d)$/i, 'QUARTER$1');
+
+  if (
+    normalized === 'ROAD_TAX_ALIGNED' ||
+    normalized === 'ALIGN_WITH_ROAD_TAX' ||
+    normalized === 'ALIGNED_TO_ROAD_TAX' ||
+    normalized === 'MANUAL_DURATION'
+  ) {
+    return '';
+  }
+
+  switch (normalized) {
     case 'MONTHLY':
       return 'Monthly';
     case 'QUARTER1':
@@ -136,8 +179,16 @@ export function getPolicyDurationLabel(value?: string | null) {
       return 'Quarter 4';
     case 'QUARTER5':
       return 'Quarter 5';
-    default:
-      return value || '';
+    default: {
+      const quarterMatch = value.trim().match(/^quarter\s*([1-5])$/i);
+      if (quarterMatch) {
+        return `Quarter ${quarterMatch[1]}`;
+      }
+      if (/^monthly$/i.test(value.trim())) {
+        return 'Monthly';
+      }
+      return '';
+    }
   }
 }
 
@@ -171,24 +222,43 @@ export function formatDisplayDate(value?: string) {
 
 function isValidDateString(value?: string) {
   if (!value) return false;
-  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
-  return Number.isFinite(parsed.getTime());
+  const normalized = value.includes('T') ? value.slice(0, 10) : value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized);
 }
 
 export function getPreferredRtsaExpiryDate(rtsaVehicle?: RTSAVehicleLookupResult) {
   if (isValidDateString(rtsaVehicle?.currentLicenseExpiryDate)) {
-    return rtsaVehicle?.currentLicenseExpiryDate || '';
+    return rtsaVehicle!.currentLicenseExpiryDate!.includes('T')
+      ? rtsaVehicle!.currentLicenseExpiryDate!.slice(0, 10)
+      : rtsaVehicle!.currentLicenseExpiryDate!.trim();
   }
   if (isValidDateString(rtsaVehicle?.roadTaxExpiryDate)) {
-    return rtsaVehicle?.roadTaxExpiryDate || '';
+    return rtsaVehicle!.roadTaxExpiryDate!.includes('T')
+      ? rtsaVehicle!.roadTaxExpiryDate!.slice(0, 10)
+      : rtsaVehicle!.roadTaxExpiryDate!.trim();
   }
   return '';
+}
+
+export function canUseRtsaAnniversaryAlignment(input: {
+  startDate: string;
+  rtsaVehicle?: RTSAVehicleLookupResult;
+}) {
+  const startDate = toIsoDateString(input.startDate) || input.startDate;
+  const firstRegDate =
+    toIsoDateString(input.rtsaVehicle?.firstRegDate) || input.rtsaVehicle?.firstRegDate || '';
+  return isValidDateString(startDate) && isValidDateString(firstRegDate);
 }
 
 export function validateRtsaAlignment(input: {
   startDate: string;
   rtsaExpiryDate?: string;
+  rtsaVehicle?: RTSAVehicleLookupResult;
 }) {
+  if (canUseRtsaAnniversaryAlignment(input)) {
+    return { valid: true, reason: 'VALID_ANNIVERSARY', message: '' };
+  }
+
   const expiry = input.rtsaExpiryDate ? new Date(`${input.rtsaExpiryDate.slice(0, 10)}T00:00:00`) : null;
   const start = input.startDate ? new Date(`${input.startDate.slice(0, 10)}T00:00:00`) : null;
   const today = new Date(`${getTodayDateString()}T00:00:00`);
@@ -204,7 +274,7 @@ export function validateRtsaAlignment(input: {
       valid: false,
       reason: 'EXPIRED_RTSA_EXPIRY',
       message:
-        'The RTSA expiry date has already passed. Please select Manual Duration to continue.',
+        'Your Road Tax has expired.',
     };
   }
   if (!start || Number.isNaN(start.getTime())) {
@@ -258,10 +328,15 @@ export function resolveInitialCoverPeriodMode(input: {
   const canAlign =
     input.isRtsaVerified &&
     input.vehicleSource === 'RTSA' &&
-    validateRtsaAlignment({
+    (canUseRtsaAnniversaryAlignment({
       startDate: input.startDate,
-      rtsaExpiryDate: getPreferredRtsaExpiryDate(input.rtsaVehicle),
-    }).valid;
+      rtsaVehicle: input.rtsaVehicle,
+    }) ||
+      validateRtsaAlignment({
+        startDate: input.startDate,
+        rtsaExpiryDate: getPreferredRtsaExpiryDate(input.rtsaVehicle),
+        rtsaVehicle: input.rtsaVehicle,
+      }).valid);
 
   if (!canAlign) return 'MANUAL_DURATION';
   if (input.hasExplicitUserSelection && input.currentMode) return input.currentMode;
@@ -273,17 +348,55 @@ export function getMotorCoverPeriodDetails(
   rtsaVehicle?: RTSAVehicleLookupResult,
 ) {
   const startDate = toIsoDateString(coverage.preferredStartDate) || coverage.preferredStartDate;
+  const currentLicenseExpiryDate = rtsaVehicle?.currentLicenseExpiryDate || '';
+  const roadTaxExpiryDate = rtsaVehicle?.roadTaxExpiryDate || '';
+  const registrationAnniversaryDate = rtsaVehicle?.registrationAnniversaryDate || '';
+  const firstRegistrationDate =
+    toIsoDateString(rtsaVehicle?.firstRegDate) || rtsaVehicle?.firstRegDate || '';
   const selectedRtsaExpiryDate = getPreferredRtsaExpiryDate(rtsaVehicle);
-  const rtsaAlignment = validateRtsaAlignment({
+  const legacyRtsaAlignment = validateRtsaAlignment({
     startDate,
     rtsaExpiryDate: selectedRtsaExpiryDate,
   });
-  const alignedEndDate =
-    coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX' && rtsaAlignment.valid
+  const anniversaryOptions: RtsaAnniversaryQuarterOptions | null =
+    startDate && firstRegistrationDate
+      ? calculateRtsaAnniversaryQuarterOptions({
+          firstRegistrationDate,
+          policyStartDate: startDate,
+          currentLicenseExpiryDate: selectedRtsaExpiryDate || null,
+        })
+      : null;
+
+  const selectedAnniversaryQuarter =
+    anniversaryOptions && ANNIVERSARY_QUARTER_KEYS.has(coverage.policyDuration || '')
+      ? anniversaryOptions.quarters.find((quarter) => quarter.key === coverage.policyDuration) ??
+        null
+      : null;
+  const activeAnniversaryQuarter =
+    selectedAnniversaryQuarter ??
+    anniversaryOptions?.quarters.find(
+      (quarter) => quarter.key === anniversaryOptions.defaultQuarter,
+    ) ??
+    null;
+
+  const usingAnniversaryAlignment = Boolean(
+    coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX' &&
+      anniversaryOptions &&
+      activeAnniversaryQuarter,
+  );
+
+  const rtsaAlignment = usingAnniversaryAlignment
+    ? { valid: true, reason: 'VALID_ANNIVERSARY', message: '' }
+    : legacyRtsaAlignment;
+
+  const alignedEndDate = usingAnniversaryAlignment
+    ? activeAnniversaryQuarter!.endDate
+    : coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX' && legacyRtsaAlignment.valid
       ? selectedRtsaExpiryDate
       : '';
-  const alignedPolicyDuration =
-    rtsaAlignment.valid && startDate && selectedRtsaExpiryDate
+  const alignedPolicyDuration = usingAnniversaryAlignment
+    ? activeAnniversaryQuarter!.key
+    : legacyRtsaAlignment.valid && startDate && selectedRtsaExpiryDate
       ? getNearestPolicyDurationForDateRange(startDate, selectedRtsaExpiryDate)
       : '';
   const manualEndDate =
@@ -297,18 +410,27 @@ export function getMotorCoverPeriodDetails(
     startDate,
     endDate,
     selectedRtsaExpiryDate,
+    currentLicenseExpiryDate,
+    roadTaxExpiryDate,
+    registrationAnniversaryDate,
+    firstRegistrationDate,
     rtsaAlignment,
     alignedPolicyDuration,
-    alignmentMessage:
-      coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX' &&
-      rtsaAlignment.valid &&
-      alignedEndDate &&
-      getNearestPolicyDurationForDateRange(startDate, alignedEndDate)
+    anniversaryOptions,
+    usingAnniversaryAlignment,
+    alignmentMessage: usingAnniversaryAlignment
+      ? activeAnniversaryQuarter!.alignsWithCurrentRtsaExpiry
+        ? `Q${activeAnniversaryQuarter!.quarterNumber} — Aligns with current RTSA expiry (${formatDisplayDate(activeAnniversaryQuarter!.endDate)}).`
+        : `Cover ends on the RTSA anniversary quarter date ${formatDisplayDate(activeAnniversaryQuarter!.endDate)}.`
+      : coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX' &&
+          legacyRtsaAlignment.valid &&
+          alignedEndDate &&
+          getNearestPolicyDurationForDateRange(startDate, alignedEndDate)
         ? `Insurance end date matches the RTSA expiry date of ${formatDisplayDate(alignedEndDate)}.`
         : '',
     coverPeriod:
       coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX'
-        ? getPolicyDurationLabel(alignedPolicyDuration) || 'Aligned to Road Tax'
+        ? getPolicyDurationLabel(alignedPolicyDuration) || ''
         : getPolicyDurationLabel(coverage.policyDuration),
     durationMethod:
       coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX'

@@ -70,6 +70,12 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
   }, [route.params.quoteId, session?.user]);
   const pricing = quote ? getQuotePricingSummary(quote) : null;
   const liabilityItems = quote ? getQuoteLiabilityItems(quote) : [];
+  const policyExcessLines =
+    quote?.policyExcessLines?.length
+      ? quote.policyExcessLines
+      : savedQuote?.policyExcessLines?.length
+        ? savedQuote.policyExcessLines
+        : [];
   const canBuy = Boolean(quote && isQuotePurchasable(quote));
   const signedIn = Boolean(session?.user);
 
@@ -99,10 +105,10 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
   const vehicleColour =
     vehicle?.colour || vehicle?.color || quote.vehicleColour || undefined;
   const durationValue =
-    quote.durationLabel ||
-    (quote.durationMonths ? `${quote.durationMonths} months` : undefined) ||
+    getPolicyDurationLabel(quote.policyDuration || form?.coverage.policyDuration) ||
     coverPeriod?.coverPeriod ||
-    getPolicyDurationLabel(quote.policyDuration || form?.coverage.policyDuration);
+    getPolicyDurationLabel(quote.durationLabel) ||
+    (quote.durationMonths ? `${quote.durationMonths} months` : undefined);
   const visibleBenefits = showAllBenefits ? quote.benefits : quote.benefits.slice(0, 3);
   const hiddenBenefitCount = Math.max(0, quote.benefits.length - 3);
   const keyFactsId = quote.keyFactStatementDocumentId;
@@ -174,8 +180,8 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
         <Card>
           <Text style={styles.sectionTitle}>Quote</Text>
           <DetailRow label="Product" value={quote.productName} />
-          <DetailRow label="Valid until" value={formatDisplayDate(quote.validUntil)} />
-          <DetailRow label="Duration" value={durationValue} />
+          <DetailRow label="Quote valid until" value={formatDisplayDate(quote.validUntil)} />
+         
         </Card>
 
         <Card>
@@ -209,6 +215,7 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
 
         <Card>
           <Text style={styles.sectionTitle}>Cover period</Text>
+          <DetailRow label="Cover period" value={durationValue} />
           <DetailRow
             label="Start date"
             value={formatDisplayDate(
@@ -221,6 +228,28 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
           />
         </Card>
 
+       
+        {liabilityItems.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>Third party liability</Text>
+            {liabilityItems.map((item) => (
+              <DetailRow key={item.label} label={item.label} value={item.value} />
+            ))}
+          </Card>
+        ) : null}
+
+        {policyExcessLines.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>Policy Excess</Text>
+            {policyExcessLines.map((line) => (
+              <View key={`${line.label}-${line.text}`} style={styles.excessItem}>
+                {line.label ? <Text style={styles.excessLabel}>{line.label}</Text> : null}
+                <Text style={styles.excessText}>{line.text}</Text>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         {pricing?.breakdown.length ? (
           <Card>
             <Text style={styles.sectionTitle}>Premium breakdown</Text>
@@ -232,16 +261,6 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
             ))}
           </Card>
         ) : null}
-
-        {liabilityItems.length > 0 ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Third party liability</Text>
-            {liabilityItems.map((item) => (
-              <DetailRow key={item.label} label={item.label} value={item.value} />
-            ))}
-          </Card>
-        ) : null}
-
         {visibleBenefits.length > 0 ? (
           <Card>
             <Text style={styles.sectionTitle}>Benefits</Text>
@@ -445,6 +464,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  excessItem: {
+    backgroundColor: colors.slate50,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.slate200,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  excessLabel: {
+    ...typography.label,
+    color: colors.slate500,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  excessText: {
+    ...typography.body,
+    color: colors.slate900,
+    fontWeight: '600',
   },
   moreBenefits: {
     ...typography.body,

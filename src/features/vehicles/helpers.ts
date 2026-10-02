@@ -45,6 +45,7 @@ export function applySavedVehiclePrefill(
     isRtsaVerified,
     rtsaVehicle,
     manualVehicle,
+    vehicleUseDeclarationAccepted: false,
     coverage: {
       ...current.coverage,
       policyProductType:

@@ -13,6 +13,7 @@ import {
   toApiPolicyProductType,
   toIsoDateString,
 } from '../features/quote/helpers';
+import { buildPolicyExcessDisplayLines } from '../features/quote/policy-excess-display';
 import type {
   CreatedQuoteRequest,
   MotorProduct,
@@ -397,6 +398,7 @@ export async function createMotorQuoteRequest(
     policy_product_type: toApiPolicyProductType(payload.coverage.policyProductType),
     policy_currency: policyCurrency,
     coverage_type: payload.coverage.coverType,
+    vehicleUseDeclarationAccepted: payload.vehicleUseDeclarationAccepted === true,
     third_party_limit_type:
       payload.coverage.coverType === 'THIRD_PARTY' && payload.coverage.thirdPartyLimitType
         ? payload.coverage.thirdPartyLimitType === 'combined'
@@ -427,6 +429,12 @@ export async function createMotorQuoteRequest(
     end_date: endDate,
     numberOfDays,
     duration_months: durationMonths || undefined,
+    firstRegDate: normalizedVehicle.firstRegDate || undefined,
+    currentLicenseExpiryDate:
+      coverPeriodDetails.selectedRtsaExpiryDate ||
+      coverPeriodDetails.currentLicenseExpiryDate ||
+      undefined,
+    roadTaxExpiryDate: coverPeriodDetails.roadTaxExpiryDate || undefined,
     selected_liability:
       payload.coverage.coverType === 'THIRD_PARTY' &&
       payload.coverage.thirdPartyLimitType === 'combined'
@@ -462,6 +470,7 @@ export async function createMotorQuoteRequest(
         ...payload.contact,
         phone: normalizeMobileForApi(payload.contact.phone),
       },
+      vehicleUseDeclarationAccepted: payload.vehicleUseDeclarationAccepted === true,
     },
   };
 
@@ -690,6 +699,19 @@ export async function getQuotesByQuoteRequestId(
           asRecord(asRecord(record.documentStatus).keyFactStatementDocument).id,
         ) || undefined,
       benefits: asStringArray(record.benefits),
+      policyExcessLines: (() => {
+        const limits = asRecord(record.limits);
+        const lines = buildPolicyExcessDisplayLines(
+          record.policyExcess ??
+            record.policy_excess ??
+            limits.policyExcess ??
+            limits.policy_excess ??
+            details.policyExcess ??
+            details.policy_excess,
+          currency,
+        );
+        return lines.length > 0 ? lines : undefined;
+      })(),
       isExpired:
         record.isExpired === true ||
         record.is_expired === true ||
