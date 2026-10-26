@@ -142,10 +142,18 @@ export function PolicyDetailsScreen({ navigation, route }: Props) {
                 <StatusBadge label={policy.displayStatus} tone={policyStatusTone(policy.displayStatus)} />
               </View>
               <DetailRow label="Policy number" value={policy.policyNumber} />
+              <DetailRow
+                label="Insured Name"
+                value={policy.insuredName || policy.customerName}
+              />
               <DetailRow label="Registration" value={policy.vehicleRegistrationNumber} />
-              <DetailRow label="Vehicle" value={policy.vehicleDetails} />
+              <DetailRow label="Vehicle Details" value={policy.vehicleDetails} />
+             
+              <DetailRow label="Product" value={policy.productName} />
               <DetailRow label="Cover type" value={formatEnumLabel(policy.coverType)} />
               <DetailRow label="Vehicle use" value={formatEnumLabel(policy.policyProductType)} />
+              <DetailRow label="Cover period" value={policy.coverPeriod} />
+              
               <DetailRow label="Start date" value={formatCustomerDate(policy.startDate)} />
               <DetailRow label="End date" value={formatCustomerDate(policy.expiryDate)} />
               <DetailRow

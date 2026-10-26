@@ -16,6 +16,7 @@ import {
   saveCustomerUser,
 } from '../services/secure-storage';
 import type { CustomerAuthSession, CustomerAuthUser } from '../types';
+import { restorePurchaseState } from './purchase-state';
 import { clearCustomerSessionState } from './clear-customer-session';
 import { clearPendingOtp } from './otp-challenge';
 import { clearSignupDraft } from './signup-draft';
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveCustomerUser(nextSession.user);
     clearPendingOtp();
     clearSignupDraft();
+    await restorePurchaseState();
     setSession(nextSession);
     setStatus('signedIn');
   }, []);
@@ -64,29 +66,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function restore() {
-      const [accessToken, user] = await Promise.all([
-        getAccessToken(),
-        getCustomerUser(),
-      ]);
+      try {
+        const [accessToken, user] = await Promise.all([
+          getAccessToken(),
+          getCustomerUser(),
+        ]);
 
-      if (cancelled) {
-        return;
+        if (cancelled) {
+          return;
+        }
+
+        if (accessToken && user) {
+          await restorePurchaseState();
+          if (cancelled) {
+            return;
+          }
+          setSession({ accessToken, user });
+          setStatus('signedIn');
+          return;
+        }
+
+        await clearCustomerSessionState();
+
+        if (cancelled) {
+          return;
+        }
+
+        setSession(null);
+        setStatus('signedOut');
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('Session restore failed', error);
+        }
+        if (cancelled) {
+          return;
+        }
+        await clearCustomerSessionState();
+        setSession(null);
+        setStatus('signedOut');
       }
-
-      if (accessToken && user) {
-        setSession({ accessToken, user });
-        setStatus('signedIn');
-        return;
-      }
-
-      await clearCustomerSessionState();
-
-      if (cancelled) {
-        return;
-      }
-
-      setSession(null);
-      setStatus('signedOut');
     }
 
     void restore();

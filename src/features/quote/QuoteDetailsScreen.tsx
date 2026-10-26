@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card } from '../../components';
 import { fetchCustomerDocumentFile, type CustomerDocumentFile } from '../../services/customer-documents';
+import { getCustomerQuote, type CustomerQuoteDetail } from '../../services/customer-portal';
 import { useAuth } from '../../store/auth-context';
 import { getGuestQuoteSession } from '../../store/quote-draft';
 import { colors, radius, spacing, typography } from '../../theme';
 import { getErrorMessage } from '../../utils/errors';
+import { formatEnumLabel } from '../customer-lists/helpers';
 import { DocumentPreviewModal } from '../policies/DocumentPreviewModal';
 import { InsurerLogo } from './InsurerLogo';
 import { QuoteChrome } from './QuoteChrome';
@@ -47,11 +49,33 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
   const [openingDoc, setOpeningDoc] = useState('');
   const [preview, setPreview] = useState<CustomerDocumentFile | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [savedQuote, setSavedQuote] = useState<CustomerQuoteDetail | null>(null);
   const guestSession = getGuestQuoteSession();
   const quote = guestSession?.quoteResponses?.find((item) => item.id === route.params.quoteId);
   const form = guestSession?.quoteRequestData;
+
+  useEffect(() => {
+    if (!session?.user || !route.params.quoteId) return;
+    let cancelled = false;
+    void getCustomerQuote(route.params.quoteId)
+      .then((detail) => {
+        if (!cancelled) setSavedQuote(detail);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedQuote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.params.quoteId, session?.user]);
   const pricing = quote ? getQuotePricingSummary(quote) : null;
   const liabilityItems = quote ? getQuoteLiabilityItems(quote) : [];
+  const policyExcessLines =
+    quote?.policyExcessLines?.length
+      ? quote.policyExcessLines
+      : savedQuote?.policyExcessLines?.length
+        ? savedQuote.policyExcessLines
+        : [];
   const canBuy = Boolean(quote && isQuotePurchasable(quote));
   const signedIn = Boolean(session?.user);
 
@@ -66,12 +90,25 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
 
   const vehicle = form?.manualVehicle;
   const coverPeriod = form ? getMotorCoverPeriodDetails(form.coverage, form.rtsaVehicle) : null;
-  const vehicleLabel = [vehicle?.make, vehicle?.model].filter(Boolean).join(' ');
+  const vehicleLabel = [
+    vehicle?.make || quote.vehicleMake || savedQuote?.vehicleMake,
+    vehicle?.model || quote.vehicleModel || savedQuote?.vehicleModel,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const registration =
+    form?.registrationNumber ||
+    quote.vehicleRegistrationNumber ||
+    savedQuote?.vehicleRegistrationNumber;
+  const vehicleYear =
+    vehicle?.yearOfManufacture || vehicle?.year || quote.vehicleYear || savedQuote?.vehicleYear;
+  const vehicleColour =
+    vehicle?.colour || vehicle?.color || quote.vehicleColour || undefined;
   const durationValue =
-    quote.durationLabel ||
-    (quote.durationMonths ? `${quote.durationMonths} months` : undefined) ||
+    getPolicyDurationLabel(quote.policyDuration || form?.coverage.policyDuration) ||
     coverPeriod?.coverPeriod ||
-    getPolicyDurationLabel(quote.policyDuration || form?.coverage.policyDuration);
+    getPolicyDurationLabel(quote.durationLabel) ||
+    (quote.durationMonths ? `${quote.durationMonths} months` : undefined);
   const visibleBenefits = showAllBenefits ? quote.benefits : quote.benefits.slice(0, 3);
   const hiddenBenefitCount = Math.max(0, quote.benefits.length - 3);
   const keyFactsId = quote.keyFactStatementDocumentId;
@@ -143,22 +180,27 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
         <Card>
           <Text style={styles.sectionTitle}>Quote</Text>
           <DetailRow label="Product" value={quote.productName} />
-          <DetailRow label="Valid until" value={formatDisplayDate(quote.validUntil)} />
-          <DetailRow label="Duration" value={durationValue} />
+          <DetailRow label="Quote valid until" value={formatDisplayDate(quote.validUntil)} />
+         
         </Card>
 
         <Card>
           <Text style={styles.sectionTitle}>Vehicle</Text>
-          <DetailRow label="Registration" value={form?.registrationNumber} />
+          <DetailRow label="Registration" value={registration} />
           <DetailRow label="Vehicle" value={vehicleLabel || undefined} />
-          <DetailRow label="Year" value={vehicle?.yearOfManufacture || vehicle?.year} />
-          <DetailRow label="Colour" value={vehicle?.colour || vehicle?.color} />
+          <DetailRow label="Year" value={vehicleYear} />
+          <DetailRow label="Colour" value={vehicleColour} />
           <DetailRow
             label="Vehicle use"
             value={
               form?.coverage.policyProductType
                 ? getPolicyProductTypeLabel(form.coverage.policyProductType)
-                : undefined
+                : formatEnumLabel(
+                    quote.vehicleUse ||
+                      quote.policyProductType ||
+                      savedQuote?.vehicleUse ||
+                      savedQuote?.policyProductType,
+                  ) || undefined
             }
           />
           <DetailRow
@@ -173,6 +215,7 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
 
         <Card>
           <Text style={styles.sectionTitle}>Cover period</Text>
+          <DetailRow label="Cover period" value={durationValue} />
           <DetailRow
             label="Start date"
             value={formatDisplayDate(
@@ -185,6 +228,28 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
           />
         </Card>
 
+       
+        {liabilityItems.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>Third party liability</Text>
+            {liabilityItems.map((item) => (
+              <DetailRow key={item.label} label={item.label} value={item.value} />
+            ))}
+          </Card>
+        ) : null}
+
+        {policyExcessLines.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>Policy Excess</Text>
+            {policyExcessLines.map((line) => (
+              <View key={`${line.label}-${line.text}`} style={styles.excessItem}>
+                {line.label ? <Text style={styles.excessLabel}>{line.label}</Text> : null}
+                <Text style={styles.excessText}>{line.text}</Text>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         {pricing?.breakdown.length ? (
           <Card>
             <Text style={styles.sectionTitle}>Premium breakdown</Text>
@@ -196,16 +261,6 @@ export function QuoteDetailsScreen({ navigation, route }: QuoteDetailsScreenProp
             ))}
           </Card>
         ) : null}
-
-        {liabilityItems.length > 0 ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Third party liability</Text>
-            {liabilityItems.map((item) => (
-              <DetailRow key={item.label} label={item.label} value={item.value} />
-            ))}
-          </Card>
-        ) : null}
-
         {visibleBenefits.length > 0 ? (
           <Card>
             <Text style={styles.sectionTitle}>Benefits</Text>
@@ -409,6 +464,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  excessItem: {
+    backgroundColor: colors.slate50,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.slate200,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  excessLabel: {
+    ...typography.label,
+    color: colors.slate500,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  excessText: {
+    ...typography.body,
+    color: colors.slate900,
+    fontWeight: '600',
   },
   moreBenefits: {
     ...typography.body,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,7 @@ import { useRoute } from '@react-navigation/native';
 import {
   Button,
   Card,
+  Checkbox,
   DatePickerField,
   ErrorMessage,
   Input,
@@ -98,7 +100,7 @@ const RTSA_DATE_LABELS = new Set([
 const STEP_COPY: Record<MotorStep, { title: string; description: string }> = {
   lookup: {
     title: 'Vehicle lookup',
-    description: 'Start with the registration number and we will try RTSA first.',
+    description: 'Start with the registration number (XXX1234 or XXX123ZM)',
   },
   vehicle: {
     title: 'Confirm vehicle details',
@@ -156,6 +158,8 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
   const [productsError, setProductsError] = useState('');
   const [productsLoading, setProductsLoading] = useState(true);
   const [hasExplicitCoverPeriodModeSelection, setHasExplicitCoverPeriodModeSelection] =
+    useState(false);
+  const [hasExplicitAnniversaryQuarterSelection, setHasExplicitAnniversaryQuarterSelection] =
     useState(false);
   const [showSavedPicker, setShowSavedPicker] = useState(false);
   const [savedVehicles, setSavedVehicles] = useState<CustomerVehicleRecord[]>([]);
@@ -248,11 +252,12 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
   }, [applyPrefill, incomingVehicleId]);
 
   const coverPeriodDetails = getMotorCoverPeriodDetails(values.coverage, values.rtsaVehicle);
+  // Align is available whenever RTSA anniversary quarters can be calculated.
+  // Road-tax expiry does not gate the option.
   const canAlignWithRoadTax =
     values.isRtsaVerified &&
     values.vehicleSource === 'RTSA' &&
-    coverPeriodDetails.rtsaAlignment.valid &&
-    Boolean(coverPeriodDetails.alignedPolicyDuration);
+    Boolean(coverPeriodDetails.anniversaryOptions);
 
   useEffect(() => {
     const nextMode = resolveInitialCoverPeriodMode({
@@ -278,18 +283,70 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     values.vehicleSource,
   ]);
 
+  useEffect(() => {
+    if (
+      values.coverage.coverPeriodMode !== 'ALIGN_WITH_ROAD_TAX' ||
+      !coverPeriodDetails.anniversaryOptions
+    ) {
+      return;
+    }
+
+    const defaultQuarter = coverPeriodDetails.anniversaryOptions.defaultQuarter;
+    const currentDuration = values.coverage.policyDuration;
+    const isValidAnniversaryQuarter = [
+      'QUARTER1',
+      'QUARTER2',
+      'QUARTER3',
+      'QUARTER4',
+      'QUARTER5',
+    ].includes(currentDuration || '');
+
+    // Keep a valid user-chosen anniversary quarter; otherwise default to the
+    // quarter that aligns with the current RTSA expiry.
+    if (
+      hasExplicitAnniversaryQuarterSelection &&
+      isValidAnniversaryQuarter &&
+      currentDuration !== defaultQuarter
+    ) {
+      return;
+    }
+
+    if (currentDuration === defaultQuarter) {
+      return;
+    }
+
+    setValues((current) => ({
+      ...current,
+      coverage: {
+        ...current.coverage,
+        policyDuration: defaultQuarter,
+      },
+    }));
+  }, [
+    coverPeriodDetails.anniversaryOptions,
+    hasExplicitAnniversaryQuarterSelection,
+    values.coverage.coverPeriodMode,
+    values.coverage.policyDuration,
+  ]);
+
   const matchedProducts = products.filter((product) => matchesSelectedCoverage(product, values));
   const coverTypeOptions = useMemo(() => {
-    const available = coverTypesFromMotorProducts(products);
+    const available = coverTypesFromMotorProducts(products, {
+      policyProductType: values.coverage.policyProductType || undefined,
+    });
     if (available.length === 0) {
-      return [{ label: 'Third Party', value: 'THIRD_PARTY' as const }];
+      return [];
     }
     return available.map((coverType) => ({ label: coverType.label, value: coverType.code }));
-  }, [products]);
+  }, [products, values.coverage.policyProductType]);
   useEffect(() => {
+    if (coverTypeOptions.length === 0) {
+      return;
+    }
     const allowed = new Set(coverTypeOptions.map((option) => option.value));
     if (values.coverage.coverType && !allowed.has(values.coverage.coverType)) {
-      const fallback = coverTypeOptions[0]?.value ?? 'THIRD_PARTY';
+      const fallback = coverTypeOptions[0]?.value;
+      if (!fallback) return;
       setValues((current) => ({
         ...current,
         coverage: {
@@ -334,9 +391,10 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
       : '') ||
     (values.isRtsaVerified &&
     values.vehicleSource === 'RTSA' &&
+    !coverPeriodDetails.anniversaryOptions &&
     coverPeriodDetails.rtsaAlignment.valid &&
     !coverPeriodDetails.alignedPolicyDuration
-      ? 'The RTSA expiry date does not produce a supported cover duration. Please select Manual Duration to continue.'
+      ? 'The RTSA vehicle data does not produce a supported anniversary cover period. Please select Manual Duration to continue.'
       : '');
   const coverDayCount =
     coverPeriodDetails.startDate && coverPeriodDetails.endDate
@@ -436,6 +494,25 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     await applyPrefill(selectedSavedId);
   };
 
+  const showRtsaLookupFailure = (message: string) => {
+    Alert.alert('Vehicle lookup', message, [
+      {
+        text: 'Try again',
+        onPress: () => {
+          setLookupError('');
+          setStep('lookup');
+        },
+      },
+      {
+        text: 'OK',
+        onPress: () => {
+          setLookupError(message);
+          setStep('vehicle');
+        },
+      },
+    ]);
+  };
+
   const handleLookup = async () => {
     const normalized = normalizeVehicleLookupNumber(values.registrationNumber);
     if (!normalized) {
@@ -463,10 +540,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
           isRtsaVerified: false,
           rtsaVehicle: undefined,
         }));
-        setLookupError(
-          'Vehicle details could not be retrieved from RTSA. Please enter the vehicle details manually.',
+        showRtsaLookupFailure(
+          'Vehicle could not be retrieved from RTSA. Please enter the vehicle details manually.',
         );
-        setStep('vehicle');
         return;
       }
       setValues((current) => ({
@@ -504,12 +580,11 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
         isRtsaVerified: false,
         rtsaVehicle: undefined,
       }));
-      setLookupError(
+      showRtsaLookupFailure(
         error instanceof RtsaLookupError
           ? error.message
-          : 'Vehicle details could not be found from RTSA. You may enter the details manually.',
+          : 'Vehicle could not be retrieved from RTSA. Please enter the vehicle details manually.',
       );
-      setStep('vehicle');
     } finally {
       setLookupLoading(false);
     }
@@ -540,12 +615,34 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     field: K,
     value: MotorQuoteFormData['coverage'][K],
   ) => {
-    if (field === 'coverPeriodMode') setHasExplicitCoverPeriodModeSelection(true);
-    setValues((current) => ({
+    if (field === 'coverPeriodMode') {
+      setHasExplicitCoverPeriodModeSelection(true);
+      if (value === 'ALIGN_WITH_ROAD_TAX') {
+        setHasExplicitAnniversaryQuarterSelection(false);
+      }
+    }
+    if (field === 'policyDuration') {
+      setHasExplicitAnniversaryQuarterSelection(true);
+    }
+    if (field === 'preferredStartDate') {
+      setHasExplicitAnniversaryQuarterSelection(false);
+    }
+    setValues((current) => {
+      const policyProductTypeChanged =
+        field === 'policyProductType' && current.coverage.policyProductType !== value;
+      return {
+        ...current,
+        coverage: { ...current.coverage, [field]: value },
+        vehicleUseDeclarationAccepted: policyProductTypeChanged
+          ? false
+          : current.vehicleUseDeclarationAccepted,
+      };
+    });
+    setErrors((current) => ({
       ...current,
-      coverage: { ...current.coverage, [field]: value },
+      [field]: undefined,
+      ...(field === 'policyProductType' ? { vehicleUseDeclarationAccepted: undefined } : {}),
     }));
-    setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
   const toggleInsurer = (company: QuoteInsurerOption) => {
@@ -581,6 +678,10 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
           sanitized !== current.registrationNumber && current.isRtsaVerified
             ? 'Manual'
             : current.vehicleSource,
+        vehicleUseDeclarationAccepted:
+          sanitized !== current.registrationNumber
+            ? false
+            : current.vehicleUseDeclarationAccepted,
       }));
       return;
     }
@@ -588,7 +689,14 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
       const manualVehicle = { ...current.manualVehicle, [field]: value };
       if (field === 'yearOfManufacture') manualVehicle.year = value;
       if (field === 'colour') manualVehicle.color = value;
-      return { ...current, manualVehicle };
+      return {
+        ...current,
+        manualVehicle,
+        vehicleUseDeclarationAccepted:
+          field === 'chassisNumber' && current.manualVehicle.chassisNumber !== value
+            ? false
+            : current.vehicleUseDeclarationAccepted,
+      };
     });
     setErrors((current) => ({ ...current, [field]: undefined, year: undefined, color: undefined }));
   };
@@ -681,11 +789,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
               {!API_BASE_URL.trim() ? (
                 <ErrorMessage message="API base URL is not configured. Set EXPO_PUBLIC_API_BASE_URL in mobile/.env, then stop Expo and run npx expo start --clear." />
               ) : null}
-              {lookupError ? <ErrorMessage message={lookupError} /> : (
-                <Text style={styles.helper}>
-                  We'll try RTSA first, then you can switch to manual entry if needed.
-                </Text>
-              )}
+              <Text style={styles.helper}>
+                We'll try RTSA first, then you can switch to manual entry if needed.
+              </Text>
               <Pressable onPress={() => setStep('vehicle')} hitSlop={12} style={styles.linkButton}>
                 <Text style={styles.link}>Enter details manually / New vehicle</Text>
               </Pressable>
@@ -701,7 +807,6 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
 
           {step === 'vehicle' ? (
             <View style={styles.section}>
-              {lookupError ? <ErrorMessage message={lookupError} /> : null}
               {values.isRtsaVerified && values.rtsaVehicle ? (
                 <Card>
                   <Text style={styles.verified}>RTSA match found</Text>
@@ -736,11 +841,9 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                     ),
                   )}
                 </Card>
-              ) : lookupError ? null : (
-                <Text style={styles.manualBanner}>
-                  Vehicle could not be retrieved from RTSA. Please enter vehicle details manually.
-                </Text>
-              )}
+              ) : lookupError ? (
+                <Text style={styles.manualBanner}>{lookupError}</Text>
+              ) : null}
               {visibleFields.includes('registrationNumber') ? (
                 <Input
                   label="Registration Number (optional for new vehicles)"
@@ -888,13 +991,44 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                     updateCoverage('policyDuration', value as MotorQuoteFormData['coverage']['policyDuration'])
                   }
                 />
+              ) : coverPeriodDetails.usingAnniversaryAlignment &&
+                coverPeriodDetails.anniversaryOptions ? (
+                <>
+                  <SelectField
+                    label="Anniversary Quarter"
+                    required
+                    value={
+                      values.coverage.policyDuration ||
+                      coverPeriodDetails.anniversaryOptions.defaultQuarter
+                    }
+                    options={coverPeriodDetails.anniversaryOptions.quarters.map((quarter) => ({
+                      label: quarter.alignsWithCurrentRtsaExpiry
+                        ? `Quarter ${quarter.quarterNumber} — Aligns with current RTSA expiry`
+                        : `Quarter ${quarter.quarterNumber}`,
+                      value: quarter.key,
+                    }))}
+                    error={errors.policyDuration}
+                    onChange={(value) =>
+                      updateCoverage(
+                        'policyDuration',
+                        value as MotorQuoteFormData['coverage']['policyDuration'],
+                      )
+                    }
+                  />
+                  <Card>
+                    <Text style={styles.detailLabel}>Cover Period</Text>
+                    <Text style={styles.detailValue}>
+                      {coverPeriodDetails.startDate && coverPeriodDetails.endDate
+                        ? `${formatDisplayDate(coverPeriodDetails.startDate)} → ${formatDisplayDate(coverPeriodDetails.endDate)}`
+                        : 'Not available'}
+                    </Text>
+                    {coverPeriodDetails.alignmentMessage ? (
+                      <Text style={styles.helper}>{coverPeriodDetails.alignmentMessage}</Text>
+                    ) : null}
+                  </Card>
+                </>
               ) : (
                 <Card>
-                  {/* <Text style={styles.detailLabel}>Aligned with RTSA Expiry</Text>
-                  <Text style={styles.helper}>
-                    {coverPeriodDetails.alignmentMessage ||
-                      'Insurance period aligned with the RTSA expiry date.'}
-                  </Text> */}
                   <Text style={styles.detailLabel}>RTSA Expiry Date</Text>
                   <Text style={styles.detailValue}>
                     {formatDisplayDate(coverPeriodDetails.selectedRtsaExpiryDate) || 'Not available'}
@@ -1114,6 +1248,7 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                 error={errors.email}
                 autoCapitalize="none"
                 keyboardType="email-address"
+                editable={!session?.user}
                 onChangeText={(value) =>
                   setValues((current) => ({
                     ...current,
@@ -1125,6 +1260,7 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                 label="Phone number"
                 value={values.contact.phone}
                 error={errors.phone}
+                editable={!session?.user}
                 onChangeText={(value) =>
                   setValues((current) => ({
                     ...current,
@@ -1194,6 +1330,35 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                 </Text>
               </Card>
               {submitError ? <ErrorMessage message={submitError} /> : null}
+              <Card style={styles.declarationCard}>
+                <Text style={styles.sectionTitle}>Vehicle Use Declaration</Text>
+                <Text style={styles.helper}>
+                  Selected Vehicle Use:{' '}
+                  {getPolicyProductTypeLabel(values.coverage.policyProductType) || '-'}
+                </Text>
+                <Checkbox
+                  label="I confirm that the vehicle use selected above accurately reflects how this vehicle is actually being used."
+                  checked={values.vehicleUseDeclarationAccepted}
+                  error={errors.vehicleUseDeclarationAccepted}
+                  onPress={() => {
+                    setValues((current) => ({
+                      ...current,
+                      vehicleUseDeclarationAccepted: !current.vehicleUseDeclarationAccepted,
+                    }));
+                    setErrors((current) => ({
+                      ...current,
+                      vehicleUseDeclarationAccepted: undefined,
+                    }));
+                  }}
+                />
+                <Text style={styles.declarationBody}>
+                  I understand that selecting an incorrect vehicle use may result in incorrect
+                  insurance cover or premium and may affect claims. Incorrect or misleading
+                  information may result in the policy being cancelled or treated in accordance
+                  with the insurer's policy terms. VenSure is not responsible for consequences
+                  arising from an incorrect vehicle-use declaration provided by the customer.
+                </Text>
+              </Card>
               <View style={styles.actions}>
                 <Button label="Back" variant="outline" disabled={submitLoading} onPress={goBack} />
                 <Button
@@ -1244,6 +1409,16 @@ const styles = StyleSheet.create({
   helper: {
     ...typography.caption,
     color: colors.slate500,
+  },
+  declarationCard: {
+    gap: spacing.sm,
+    borderColor: colors.amber800,
+    backgroundColor: colors.amber50,
+  },
+  declarationBody: {
+    ...typography.caption,
+    color: colors.slate600,
+    lineHeight: 18,
   },
   linkButton: {
     minHeight: 44,

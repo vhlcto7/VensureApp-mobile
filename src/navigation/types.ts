@@ -21,16 +21,13 @@ export type AuthStackParamList = {
   QuoteReview: { quoteId: string };
 };
 
-export type CustomerTabParamList = {
-  Home: undefined;
-  Quotes: undefined;
-  Policies: undefined;
-  Payments: undefined;
-  Profile: undefined;
-};
-
+/** Nested stack routes shown inside each customer tab (tabs stay visible). */
 export type CustomerStackParamList = {
-  CustomerTabs: NavigatorScreenParams<CustomerTabParamList>;
+  HomeRoot: undefined;
+  QuotesRoot: undefined;
+  PoliciesRoot: undefined;
+  PaymentsRoot: undefined;
+  ProfileRoot: undefined;
   MotorQuote: { customerVehicleId?: string; skipSavedPicker?: boolean } | undefined;
   Vehicles: undefined;
   VehicleDetails: { vehicleId: string };
@@ -45,6 +42,14 @@ export type CustomerStackParamList = {
   PaymentDetails: { transactionId: string };
 };
 
+export type CustomerTabParamList = {
+  Home: NavigatorScreenParams<CustomerStackParamList> | undefined;
+  Quotes: NavigatorScreenParams<CustomerStackParamList> | undefined;
+  Policies: NavigatorScreenParams<CustomerStackParamList> | undefined;
+  Payments: NavigatorScreenParams<CustomerStackParamList> | undefined;
+  Profile: NavigatorScreenParams<CustomerStackParamList> | undefined;
+};
+
 export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
   CompositeScreenProps<
     NativeStackScreenProps<AuthStackParamList, T>,
@@ -54,11 +59,14 @@ export type AuthStackScreenProps<T extends keyof AuthStackParamList> =
 export type CustomerStackScreenProps<T extends keyof CustomerStackParamList> =
   CompositeScreenProps<
     NativeStackScreenProps<CustomerStackParamList, T>,
-    NativeStackScreenProps<RootStackParamList>
+    CompositeScreenProps<
+      BottomTabScreenProps<CustomerTabParamList>,
+      NativeStackScreenProps<RootStackParamList>
+    >
   >;
 
 export type CustomerTabScreenProps<T extends keyof CustomerTabParamList> =
   CompositeScreenProps<
     BottomTabScreenProps<CustomerTabParamList, T>,
-    CustomerStackScreenProps<'CustomerTabs'>
+    NativeStackScreenProps<RootStackParamList>
   >;

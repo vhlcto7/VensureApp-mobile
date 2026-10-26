@@ -77,11 +77,22 @@ export function CustomerQuoteDetailsScreen({ navigation, route }: Props) {
               <DetailRow label="Cover type" value={formatEnumLabel(quote.coverType)} />
               <DetailRow label="Vehicle use" value={formatEnumLabel(quote.policyProductType)} />
               <DetailRow label="Product" value={quote.productName} />
-              <DetailRow label="Duration" value={duration} />
+              <DetailRow label="Cover period" value={duration} />
               <DetailRow label="Quoted" value={formatCustomerDate(quote.createdDate)} />
-              <DetailRow label="Valid until" value={formatCustomerDate(quote.validUntil)} />
+              <DetailRow label="Quote valid until" value={formatCustomerDate(quote.validUntil)} />
               <DetailRow label="Premium" value={amount} />
             </Card>
+            {quote.policyExcessLines?.length ? (
+              <Card>
+                <Text style={styles.section}>Policy Excess</Text>
+                {quote.policyExcessLines.map((line) => (
+                  <View key={`${line.label}-${line.text}`} style={styles.excessItem}>
+                    {line.label ? <Text style={styles.excessLabel}>{line.label}</Text> : null}
+                    <Text style={styles.excessText}>{line.text}</Text>
+                  </View>
+                ))}
+              </Card>
+            ) : null}
             {quote.premiumBreakdown?.insurancePremium || quote.premiumBreakdown?.totalPayable ? (
               <Card>
                 <Text style={styles.section}>Premium</Text>
@@ -163,6 +174,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.slate950,
     marginBottom: spacing.sm,
+  },
+  excessItem: {
+    backgroundColor: colors.slate50,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.slate200,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  excessLabel: {
+    ...typography.label,
+    color: colors.slate500,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  excessText: {
+    ...typography.body,
+    color: colors.slate900,
+    fontWeight: '600',
   },
   error: {
     gap: spacing.md,

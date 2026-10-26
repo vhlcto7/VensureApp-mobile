@@ -11,6 +11,10 @@ import {
 } from '../../components';
 import type { AuthStackScreenProps } from '../../navigation/types';
 import {
+  VENSURE_PRIVACY_POLICY_URL,
+  VENSURE_TERMS_URL,
+} from '../../constants/legal-urls';
+import {
   getCustomerSignupConsents,
   signupCustomer,
 } from '../../services/customer-auth';
@@ -130,6 +134,14 @@ export function AccountCreationScreen({ navigation }: AccountCreationScreenProps
     }
   };
 
+  const openTerms = () => {
+    void Linking.openURL(VENSURE_TERMS_URL);
+  };
+
+  const openPrivacyPolicy = () => {
+    void Linking.openURL(VENSURE_PRIVACY_POLICY_URL);
+  };
+
   const onSendOtp = async () => {
     const nextErrors: Partial<Record<keyof CustomerAccountCreationForm, string>> = {};
 
@@ -237,18 +249,37 @@ export function AccountCreationScreen({ navigation }: AccountCreationScreenProps
           <Text style={styles.sectionCopy}>
             {consent
               ? `${consent.title}${consent.version ? ` · Version ${consent.version}` : ''}`
-              : 'VenSure publishes a single Customer Legal Agreement covering Terms and Privacy.'}
+              : 'Please review the VenSure Terms and Privacy Policy before continuing.'}
           </Text>
           <Pressable
             accessibilityRole="link"
-            accessibilityLabel="Terms and Conditions"
-            disabled={!consent?.viewUrl}
+            accessibilityLabel="Open Terms and Conditions"
             hitSlop={12}
-            onPress={openLegalDocument}
+            onPress={openTerms}
             style={styles.legalLink}
           >
             <Text style={styles.legalLinkText}>Terms and Conditions</Text>
           </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Open Privacy Policy"
+            hitSlop={12}
+            onPress={openPrivacyPolicy}
+            style={styles.legalLink}
+          >
+            <Text style={styles.legalLinkText}>Privacy Policy</Text>
+          </Pressable>
+          {consent?.viewUrl ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Open Customer Legal Agreement"
+              hitSlop={12}
+              onPress={openLegalDocument}
+              style={styles.legalLink}
+            >
+              <Text style={styles.legalLinkText}>Customer Legal Agreement</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <Checkbox

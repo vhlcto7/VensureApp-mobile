@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { Button, Card, Checkbox, ErrorMessage, LoadingIndicator } from '../../components';
+import { Button, Card, Checkbox, ErrorMessage, Input, LoadingIndicator } from '../../components';
 import {
   fetchCustomerDocumentFile,
   type CustomerDocumentFile,
 } from '../../services/customer-documents';
 import {
   claimCustomerQuote,
+  confirmCustomerInsuredName,
   getCustomerPaymentSettings,
   getQuotePurchaseSummary,
   type CustomerPaymentSettings,
@@ -67,9 +68,13 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
   const [summary, setSummary] = useState<QuotePurchaseSummary | null>(null);
   const [settings, setSettings] = useState<CustomerPaymentSettings | null>(null);
   const [method, setMethod] = useState<'MOBILE_MONEY' | 'CARD'>('MOBILE_MONEY');
+  const [insuredName, setInsuredName] = useState('');
+  const [insuredNameConfirmed, setInsuredNameConfirmed] = useState(false);
+  const [insuredNameError, setInsuredNameError] = useState('');
   const [openingDoc, setOpeningDoc] = useState('');
   const [preview, setPreview] = useState<CustomerDocumentFile | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const paymentStartInFlightRef = useRef(false);
 
   useEffect(() => {
     void savePendingPurchase({
@@ -98,6 +103,16 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
       await claimCustomerQuote(quoteId);
       const nextSummary = await getQuotePurchaseSummary(quoteId);
       setSummary(nextSummary);
+      const nextInsuredName = (
+        nextSummary.quote.insuredName ||
+        nextSummary.quote.customerName ||
+        session?.user.fullName ||
+        form?.contact.fullName ||
+        ''
+      ).trim();
+      setInsuredName(nextInsuredName);
+      setInsuredNameConfirmed(Boolean(nextSummary.quote.insuredNameConfirmed));
+      setInsuredNameError('');
       if (
         guestQuote?.insurancePremium !== undefined &&
         nextSummary.quote.premium !== undefined &&
@@ -110,10 +125,17 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
     } finally {
       setLoading(false);
     }
-  }, [guestQuote?.insurancePremium, quoteId, session?.user]);
+  }, [
+    form?.contact.fullName,
+    guestQuote?.insurancePremium,
+    quoteId,
+    session?.user,
+    session?.user.fullName,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
+      paymentStartInFlightRef.current = false;
       void load();
     }, [load]),
   );
@@ -221,34 +243,78 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
   }
 
   async function startPayment() {
+    if (paymentStartInFlightRef.current) return;
+    paymentStartInFlightRef.current = true;
+
     if (!session?.user) {
       await savePendingPurchase({ quoteId, quoteRequestId: getGuestQuoteSession()?.quoteRequestId });
+      paymentStartInFlightRef.current = false;
       navigation.navigate('Login');
       return;
     }
-    if (amountError) return;
+    if (amountError) {
+      paymentStartInFlightRef.current = false;
+      return;
+    }
     if (!settings?.mobileMoneyEnabled && !settings?.cardEnabled) {
+      paymentStartInFlightRef.current = false;
       setError('No payment methods are currently enabled.');
       return;
     }
     if (summary && !summary.paymentAllowed) {
+      paymentStartInFlightRef.current = false;
       setError(summary.reason || 'This quote is not ready for payment.');
       return;
     }
     const wordingId = summary?.policyWording?.id;
     const keyFactsId = summary?.keyFacts?.id;
     if (!wordingId || !keyFactsId) {
+      paymentStartInFlightRef.current = false;
       setError('Key Facts and Policy Wording must be available before payment.');
       return;
     }
     if (summary?.documentConsentRequired && !accepted) {
+      paymentStartInFlightRef.current = false;
       setError('Please confirm that you have reviewed the Key Facts and Policy Wording.');
+      return;
+    }
+
+    const normalizedInsuredName = insuredName.trim().replace(/\s+/g, ' ');
+    if (!normalizedInsuredName || normalizedInsuredName.length < 2) {
+      paymentStartInFlightRef.current = false;
+      setInsuredNameError('Insured Name cannot be blank.');
+      setError('Please confirm the Insured Name before proceeding with payment.');
+      return;
+    }
+    if (!insuredNameConfirmed) {
+      paymentStartInFlightRef.current = false;
+      setInsuredNameError('Please confirm the Insured Name before proceeding with payment.');
+      setError('Please confirm the Insured Name before proceeding with payment.');
       return;
     }
 
     setPaying(true);
     setError('');
+    setInsuredNameError('');
     try {
+      try {
+        const confirmation = await confirmCustomerInsuredName(quoteId, normalizedInsuredName);
+        setInsuredName(confirmation.insuredName);
+        setInsuredNameConfirmed(true);
+      } catch (confirmError) {
+        const confirmMessage = getErrorMessage(
+          confirmError,
+          'Please confirm the Insured Name before proceeding with payment.',
+        );
+        const confirmationLocked =
+          /payment has been initiated/i.test(confirmMessage) ||
+          /payment has been completed/i.test(confirmMessage) ||
+          /policy has been issued/i.test(confirmMessage);
+        if (!confirmationLocked) {
+          throw confirmError;
+        }
+      }
+
       const checkout = await createGeePayCheckoutSession({
         quoteId,
         paymentMethod: method,
@@ -261,6 +327,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
         roundMoney(Number(checkout.totalAmount)) !== roundMoney(Number(totalPayable))
       ) {
         setAmountError('Unable to confirm payment amount. Please refresh your quote.');
+        paymentStartInFlightRef.current = false;
         return;
       }
       await saveCheckoutState({
@@ -271,6 +338,7 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
       });
       navigation.navigate('QuotePayment', { quoteId, transactionRef: checkout.transactionRef });
     } catch (payError) {
+      paymentStartInFlightRef.current = false;
       setError(getErrorMessage(payError, 'Payment could not be started. Please try again.'));
     } finally {
       setPaying(false);
@@ -300,6 +368,33 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
           </View>
           <Text style={styles.premium}>{formatCustomerMoney(premium, currency) || guestQuote?.premiumLabel}</Text>
           <Text style={styles.premiumHint}>Insurance Premium</Text>
+          {session?.user ? (
+            <View style={styles.insuredBlock}>
+              <Input
+                label="Insured Name"
+                value={insuredName}
+                autoCapitalize="words"
+                autoComplete="name"
+                editable={!paying}
+                error={insuredNameError}
+                onChangeText={(value) => {
+                  setInsuredName(value);
+                  setInsuredNameConfirmed(false);
+                  setInsuredNameError('');
+                }}
+              />
+              <Text style={styles.helper}>Shown on your insurance certificate.</Text>
+              <Checkbox
+                label="I confirm this insured name is correct."
+                checked={insuredNameConfirmed}
+                onPress={() => {
+                  if (!insuredName.trim() || paying) return;
+                  setInsuredNameConfirmed((value) => !value);
+                  setInsuredNameError('');
+                }}
+              />
+            </View>
+          ) : null}
           <DetailRow label="Registration" value={registration} />
           <DetailRow label="Vehicle" value={vehicle || undefined} />
           <DetailRow label="Cover type" value={formatEnumLabel(coverType)} />
@@ -435,7 +530,11 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
           }
           variant="cta"
           loading={paying}
-          disabled={Boolean(amountError) || paying}
+          disabled={
+            Boolean(amountError) ||
+            paying ||
+            (Boolean(session?.user) && (!insuredName.trim() || !insuredNameConfirmed))
+          }
           onPress={() => void startPayment()}
         />
       </ScrollView>
@@ -481,6 +580,10 @@ const styles = StyleSheet.create({
   helper: {
     ...typography.caption,
     color: colors.slate500,
+  },
+  insuredBlock: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   methodHint: {
     marginBottom: spacing.sm,

@@ -21,7 +21,12 @@ export type MotorValidationOptions = {
   comprehensiveCombinedLiabilityConfigured?: boolean;
   rtsaAlignment?: { valid: boolean; message: string };
   selectedRtsaExpiryDate?: string;
-  coverPeriodDetails?: { endDate?: string; alignedPolicyDuration?: string };
+  coverPeriodDetails?: {
+    endDate?: string;
+    alignedPolicyDuration?: string;
+    usingAnniversaryAlignment?: boolean;
+    anniversaryOptions?: unknown;
+  };
 };
 
 export function validateMotorStep(
@@ -153,7 +158,22 @@ export function validateMotorStep(
       }
     }
     if (coverage.coverPeriodMode === 'ALIGN_WITH_ROAD_TAX') {
-      if (!options.rtsaAlignment?.valid) {
+      if (options.coverPeriodDetails?.usingAnniversaryAlignment) {
+        if (!options.coverPeriodDetails?.anniversaryOptions) {
+          errors.coverPeriodMode =
+            'Align with Road Tax requires a valid First Registration Date from RTSA. Please use Manual Duration.';
+        } else if (!options.coverPeriodDetails?.endDate) {
+          errors.coverPeriodMode =
+            'A valid RTSA anniversary quarter end date could not be calculated. Please use Manual Duration.';
+        } else if (
+          !['QUARTER1', 'QUARTER2', 'QUARTER3', 'QUARTER4', 'QUARTER5'].includes(
+            options.coverPeriodDetails.alignedPolicyDuration || '',
+          )
+        ) {
+          errors.policyDuration =
+            'Select Quarter 1, 2, 3, 4, or 5 for RTSA anniversary alignment.';
+        }
+      } else if (!options.rtsaAlignment?.valid) {
         errors.coverPeriodMode =
           options.rtsaAlignment?.message ||
           'Align with Road Tax is unavailable for the selected dates. Please use Manual Duration.';
@@ -176,6 +196,11 @@ export function validateMotorStep(
     if (emailError) errors.email = emailError;
     const phoneError = getMobileValidationError(values.contact.phone);
     if (phoneError) errors.phone = phoneError;
+  }
+
+  if (step === 'review' && !values.vehicleUseDeclarationAccepted) {
+    errors.vehicleUseDeclarationAccepted =
+      'Please confirm that the selected vehicle use is correct before generating quotes.';
   }
 
   return errors;

@@ -13,6 +13,7 @@ import {
   toApiPolicyProductType,
   toIsoDateString,
 } from '../features/quote/helpers';
+import { buildPolicyExcessDisplayLines } from '../features/quote/policy-excess-display';
 import type {
   CreatedQuoteRequest,
   MotorProduct,
@@ -296,13 +297,20 @@ export type MotorCoverTypeOption = {
   label: string;
 };
 
-export function coverTypesFromMotorProducts(products: MotorProduct[]): MotorCoverTypeOption[] {
+export function coverTypesFromMotorProducts(
+  products: MotorProduct[],
+  options?: { policyProductType?: string },
+): MotorCoverTypeOption[] {
   const labels: Record<MotorCoverTypeOption['code'], string> = {
     THIRD_PARTY: 'Third Party',
     COMPREHENSIVE: 'Comprehensive',
   };
+  const selectedUse = options?.policyProductType?.trim();
   const seen = new Set<MotorCoverTypeOption['code']>();
   for (const product of products) {
+    if (selectedUse && product.policyProductType !== selectedUse) {
+      continue;
+    }
     const code = product.coverageType?.toUpperCase();
     if (code === 'THIRD_PARTY' || code === 'COMPREHENSIVE') seen.add(code);
   }
@@ -397,6 +405,7 @@ export async function createMotorQuoteRequest(
     policy_product_type: toApiPolicyProductType(payload.coverage.policyProductType),
     policy_currency: policyCurrency,
     coverage_type: payload.coverage.coverType,
+    vehicleUseDeclarationAccepted: payload.vehicleUseDeclarationAccepted === true,
     third_party_limit_type:
       payload.coverage.coverType === 'THIRD_PARTY' && payload.coverage.thirdPartyLimitType
         ? payload.coverage.thirdPartyLimitType === 'combined'
@@ -427,6 +436,12 @@ export async function createMotorQuoteRequest(
     end_date: endDate,
     numberOfDays,
     duration_months: durationMonths || undefined,
+    firstRegDate: normalizedVehicle.firstRegDate || undefined,
+    currentLicenseExpiryDate:
+      coverPeriodDetails.selectedRtsaExpiryDate ||
+      coverPeriodDetails.currentLicenseExpiryDate ||
+      undefined,
+    roadTaxExpiryDate: coverPeriodDetails.roadTaxExpiryDate || undefined,
     selected_liability:
       payload.coverage.coverType === 'THIRD_PARTY' &&
       payload.coverage.thirdPartyLimitType === 'combined'
@@ -462,6 +477,7 @@ export async function createMotorQuoteRequest(
         ...payload.contact,
         phone: normalizeMobileForApi(payload.contact.phone),
       },
+      vehicleUseDeclarationAccepted: payload.vehicleUseDeclarationAccepted === true,
     },
   };
 
@@ -517,6 +533,7 @@ export async function getQuotesByQuoteRequestId(
 
   return asArray(unwrap(data)).map((item) => {
     const record = asRecord(item);
+    const vehicle = asRecord(record.vehicle);
     const breakdown = asRecord(record.premiumBreakdown ?? record.premium_breakdown);
     const details = asRecord(record.insurer_response ?? record.insurerResponse);
     const nestedCompany = asRecord(record.insurance_companies ?? record.insuranceCompany);
@@ -656,6 +673,28 @@ export async function getQuotesByQuoteRequestId(
       paymentFee: readNumber(breakdown.paymentFee, record.paymentFee, record.paymentProcessingFee),
       badge: readQuoteBadge(record.badge),
       quoteRequestId: readString(record.quoteRequestId, record.quote_request_id) || undefined,
+      vehicleRegistrationNumber:
+        readString(
+          vehicle.registrationNumber,
+          vehicle.registration_number,
+          vehicle.plate_number,
+          record.vehicleRegistrationNumber,
+          record.registrationNumber,
+        ) || undefined,
+      vehicleMake: readString(vehicle.make, record.vehicleMake, record.make) || undefined,
+      vehicleModel: readString(vehicle.model, record.vehicleModel, record.model) || undefined,
+      vehicleYear:
+        readString(
+          vehicle.year,
+          vehicle.yearOfManufacture,
+          vehicle.year_of_manufacture,
+          record.vehicleYear,
+        ) || undefined,
+      vehicleColour:
+        readString(vehicle.colour, vehicle.color, record.vehicleColour, record.colour) || undefined,
+      vehicleUse:
+        readString(vehicle.vehicleUse, vehicle.vehicle_use, record.vehicleUse, record.policyType) ||
+        undefined,
       policyWordingDocumentId:
         readString(
           asRecord(record.policyWordingDocument).id,
@@ -667,6 +706,19 @@ export async function getQuotesByQuoteRequestId(
           asRecord(asRecord(record.documentStatus).keyFactStatementDocument).id,
         ) || undefined,
       benefits: asStringArray(record.benefits),
+      policyExcessLines: (() => {
+        const limits = asRecord(record.limits);
+        const lines = buildPolicyExcessDisplayLines(
+          record.policyExcess ??
+            record.policy_excess ??
+            limits.policyExcess ??
+            limits.policy_excess ??
+            details.policyExcess ??
+            details.policy_excess,
+          currency,
+        );
+        return lines.length > 0 ? lines : undefined;
+      })(),
       isExpired:
         record.isExpired === true ||
         record.is_expired === true ||

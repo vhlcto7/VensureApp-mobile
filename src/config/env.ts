@@ -33,13 +33,13 @@ const productionApiLooksUnsafe =
   apiUrlForCheck.includes('127.0.0.1') ||
   /(?:^|\/\/)192\.168\./.test(apiUrlForCheck);
 
-if (isProductionApp && productionApiLooksUnsafe) {
+if (!__DEV__ && isProductionApp && productionApiLooksUnsafe) {
   throw new Error(
     'Production builds must not use a UAT, localhost, or LAN API URL. Set EXPO_PUBLIC_API_BASE_URL to the production NestJS API in the EAS production environment.',
   );
 }
 
-if ((!__DEV__ || isProductionApp) && !API_BASE_URL) {
+if (!__DEV__ && !API_BASE_URL) {
   throw new Error(
     'EXPO_PUBLIC_API_BASE_URL is required for release builds. Set it in the EAS/production environment. Do not bake UAT, localhost, or a LAN address as a fallback.',
   );

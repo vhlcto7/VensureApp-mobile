@@ -7,6 +7,7 @@ type PhoneNumberFieldProps = {
   label?: string;
   value: string;
   error?: string;
+  editable?: boolean;
   onChangeText: (value: string) => void;
 };
 
@@ -14,6 +15,7 @@ export function PhoneNumberField({
   label = 'Mobile number',
   value,
   error,
+  editable = true,
   onChangeText,
 }: PhoneNumberFieldProps) {
   const [focused, setFocused] = useState(false);
@@ -26,6 +28,7 @@ export function PhoneNumberField({
           styles.field,
           focused ? styles.fieldFocused : null,
           error ? styles.fieldError : null,
+          !editable ? styles.fieldDisabled : null,
         ]}
       >
         <View style={styles.prefix} accessibilityLabel="Country code plus 260">
@@ -40,6 +43,7 @@ export function PhoneNumberField({
           keyboardType="phone-pad"
           placeholder="Enter your mobile number"
           placeholderTextColor={colors.slate400}
+          editable={editable}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -75,6 +79,9 @@ const styles = StyleSheet.create({
   },
   fieldError: {
     borderColor: colors.rose600,
+  },
+  fieldDisabled: {
+    backgroundColor: colors.slate50,
   },
   prefix: {
     minWidth: 84,

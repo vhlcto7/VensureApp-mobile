@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Button, ErrorMessage, ScreenContainer } from '../../components';
-import type { CustomerTabScreenProps } from '../../navigation/types';
+import type { CustomerStackScreenProps } from '../../navigation/types';
 import {
   listCustomerPolicies,
   type CoverTypeFilter,
@@ -24,7 +24,7 @@ import { useDebouncedValue } from '../customer-lists/useDebouncedValue';
 import { usePagedList } from '../customer-lists/usePagedList';
 import { useAvailableMotorCoverTypes } from '../quote/useAvailableMotorCoverTypes';
 
-type PoliciesScreenProps = CustomerTabScreenProps<'Policies'>;
+type PoliciesScreenProps = CustomerStackScreenProps<'PoliciesRoot'>;
 type PolicyStatusChip = 'all' | 'active' | 'expiring' | 'expired';
 type PolicyChip = PolicyStatusChip | CoverTypeFilter;
 type PolicySort = 'expiry' | 'newest' | 'oldest';

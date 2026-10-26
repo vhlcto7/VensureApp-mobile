@@ -108,6 +108,8 @@ export type MotorQuoteFormData = {
   coverage: MotorCoveragePreferences;
   contact: ContactDetails;
   insurerSelection: QuoteInsurerSelection;
+  /** Confirmation that selected vehicle use is accurate. Never pre-select. */
+  vehicleUseDeclarationAccepted: boolean;
 };
 
 export type QuoteInsurerOption = {
@@ -181,9 +183,16 @@ export type QuoteResultItem = {
   paymentFee?: number;
   badge?: 'Best Price' | 'Recommended' | 'Popular';
   quoteRequestId?: string;
+  vehicleRegistrationNumber?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+  vehicleColour?: string;
+  vehicleUse?: string;
   policyWordingDocumentId?: string;
   keyFactStatementDocumentId?: string;
   benefits: string[];
+  policyExcessLines?: Array<{ label: string; text: string }>;
   isExpired?: boolean;
   isUnavailable?: boolean;
 };
@@ -291,5 +300,6 @@ export function createEmptyMotorQuoteForm(today: string): MotorQuoteFormData {
       selectedCompanyIds: [],
       selectedCompanyNames: [],
     },
+    vehicleUseDeclarationAccepted: false,
   };
 }

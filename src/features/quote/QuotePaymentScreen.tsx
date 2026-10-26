@@ -25,8 +25,8 @@ type QuotePaymentScreenProps = {
       params: { policyId?: string; quoteId: string },
     ) => void;
     navigate: (
-      name: 'CustomerTabs' | 'QuoteReview',
-      params?: { quoteId?: string; screen?: 'Payments' },
+      name: 'Payments' | 'QuoteReview',
+      params?: { quoteId?: string },
     ) => void;
   };
   route: {
@@ -343,7 +343,7 @@ export function QuotePaymentScreen({ navigation, route }: QuotePaymentScreenProp
             <Button
               label="Back to Payments"
               variant="outline"
-              onPress={() => navigation.navigate('CustomerTabs', { screen: 'Payments' })}
+              onPress={() => navigation.navigate('Payments')}
             />
           ) : null}
           {phase === 'failed' ? (

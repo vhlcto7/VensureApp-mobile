@@ -1,6 +1,7 @@
 import { apiClient, assertApiConfigured } from '../api/client';
 import { API_BASE_URL } from '../config/env';
 import { toFiniteNumber } from '../features/quote/helpers';
+import { buildPolicyExcessDisplayLines } from '../features/quote/policy-excess-display';
 import type { QuoteInsurerOption } from '../features/quote/types';
 import {
   documentDisplayName,
@@ -89,6 +90,9 @@ export type CustomerQuoteRecord = {
   endDate?: string;
   policyId?: string;
   logoUrl?: string;
+  insuredName?: string | null;
+  insuredNameConfirmed?: boolean;
+  customerName?: string | null;
 };
 
 export type QuoteProductDocument = {
@@ -119,6 +123,7 @@ export type CustomerQuoteDetail = CustomerQuoteRecord & {
   productName?: string;
   policyDurationLabel?: string;
   benefits: string[];
+  policyExcessLines?: Array<{ label: string; text: string }>;
   premiumBreakdown?: Record<string, string | number | undefined>;
 };
 
@@ -132,12 +137,16 @@ export type CustomerPolicyRecord = {
   vehicleDetails?: string;
   coverType: string;
   policyProductType?: string;
+  productName?: string;
+  coverPeriod?: string;
   startDate: string;
   expiryDate: string;
   backendStatus: string;
   displayStatus: CustomerPolicyStatus;
   premiumPaid?: string;
   currency?: string;
+  insuredName?: string;
+  customerName?: string;
 };
 
 export type CustomerPolicyDocument = {
@@ -202,6 +211,7 @@ function asArray(value: unknown): unknown[] {
 function readString(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   }
   return '';
 }
@@ -411,6 +421,26 @@ export async function claimCustomerQuote(quoteId: string): Promise<{ quoteId: st
   const nested = asRecord(record.data);
   const source = nested.quoteId || nested.id ? nested : record;
   return { quoteId: readString(source.quoteId, source.id) || quoteId };
+}
+
+export async function confirmCustomerInsuredName(
+  quoteId: string,
+  fullName: string,
+): Promise<{ quoteId: string; insuredName: string; confirmed: boolean; confirmedAt: string | null }> {
+  assertApiConfigured();
+  const { data } = await apiClient.post(`/customer/quotes/${quoteId}/confirm-insured-name`, {
+    fullName,
+    confirmed: true,
+  });
+  const record = asRecord(data);
+  const nested = asRecord(record.data);
+  const source = nested.quoteId || nested.insuredName || nested.confirmedAt ? nested : record;
+  return {
+    quoteId: readString(source.quoteId, source.id) || quoteId,
+    insuredName: readString(source.insuredName, source.insured_name, fullName) || fullName,
+    confirmed: source.confirmed === true,
+    confirmedAt: readString(source.confirmedAt, source.confirmed_at) || null,
+  };
 }
 
 export async function getQuotePurchaseSummary(quoteId: string): Promise<QuotePurchaseSummary> {
@@ -669,9 +699,15 @@ function mapQuote(item: unknown): CustomerQuoteRecord {
       vehicle.registrationNumber,
       vehicle.plate_number,
     ),
-    vehicleMake: readString(vehicle.make, record.vehicleMake) || undefined,
-    vehicleModel: readString(vehicle.model, record.vehicleModel) || undefined,
-    vehicleYear: readString(vehicle.year, record.vehicleYear) || undefined,
+    vehicleMake: readString(vehicle.make, record.vehicleMake, record.make) || undefined,
+    vehicleModel: readString(vehicle.model, record.vehicleModel, record.model) || undefined,
+    vehicleYear:
+      readString(
+        vehicle.year,
+        vehicle.yearOfManufacture,
+        vehicle.year_of_manufacture,
+        record.vehicleYear,
+      ) || undefined,
     vehicleUse: readString(record.policyType, product.policyType, record.productGroupLabel) || undefined,
     coverType: readString(record.coverType, product.coverType, record.coverTypeSummary),
     insurerName: readString(record.insurerName, insurer.name) || 'Insurer',
@@ -699,6 +735,22 @@ function mapQuote(item: unknown): CustomerQuoteRecord {
     startDate: readString(record.startDate, record.start_date) || undefined,
     endDate: readString(record.endDate, record.end_date, record.validUntil) || undefined,
     policyId: readString(record.policyId, record.policy_id) || undefined,
+    insuredName:
+      readString(
+        record.insuredName,
+        record.insured_name,
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || null,
+    insuredNameConfirmed:
+      record.insuredNameConfirmed === true || record.insured_name_confirmed === true,
+    customerName:
+      readString(
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || null,
   };
 }
 
@@ -709,12 +761,21 @@ function mapQuoteDetail(item: unknown): CustomerQuoteDetail {
   const benefits = asArray(record.benefits)
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter(Boolean);
+  const limits = asRecord(record.limits);
+  const policyExcessLines = buildPolicyExcessDisplayLines(
+    record.policyExcess ??
+      record.policy_excess ??
+      limits.policyExcess ??
+      limits.policy_excess,
+    mapped.currency,
+  );
 
   return {
     ...mapped,
     productName: readString(record.productName, asRecord(record.product).name) || undefined,
     policyDurationLabel: readString(record.policyDuration, mapped.policyDuration) || undefined,
     benefits,
+    policyExcessLines: policyExcessLines.length > 0 ? policyExcessLines : undefined,
     premiumBreakdown: Object.keys(breakdown).length
       ? {
           insurancePremium: readNumber(breakdown.insurancePremium),
@@ -768,12 +829,74 @@ function mapPolicy(item: unknown): CustomerPolicyRecord {
       undefined,
     coverType: readString(record.coverType, record.coverTypeSummary, record.cover_type),
     policyProductType: readString(record.policyType, record.productGroupLabel) || undefined,
+    productName:
+      readString(record.productName, record.product_name, asRecord(record.product).name) ||
+      undefined,
+    coverPeriod: (() => {
+      const candidates = [
+        record.coverPeriod,
+        record.cover_period,
+        record.policyDuration,
+        record.policy_duration,
+      ];
+      for (const candidate of candidates) {
+        const value = readString(candidate);
+        if (!value) continue;
+        const normalized = value
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, '_')
+          .replace(/^QUARTER[_\s-]?(\d)$/i, 'QUARTER$1');
+        if (
+          normalized === 'ROAD_TAX_ALIGNED' ||
+          normalized === 'ALIGN_WITH_ROAD_TAX' ||
+          normalized === 'ALIGNED_TO_ROAD_TAX' ||
+          normalized === 'MANUAL_DURATION'
+        ) {
+          continue;
+        }
+        switch (normalized) {
+          case 'MONTHLY':
+            return 'Monthly';
+          case 'QUARTER1':
+            return 'Quarter 1';
+          case 'QUARTER2':
+            return 'Quarter 2';
+          case 'QUARTER3':
+            return 'Quarter 3';
+          case 'QUARTER4':
+            return 'Quarter 4';
+          case 'QUARTER5':
+            return 'Quarter 5';
+          default: {
+            const quarterMatch = value.trim().match(/^quarter\s*([1-5])$/i);
+            if (quarterMatch) return `Quarter ${quarterMatch[1]}`;
+            if (/^monthly$/i.test(value.trim())) return 'Monthly';
+          }
+        }
+      }
+      return undefined;
+    })(),
     startDate,
     expiryDate,
     backendStatus,
     displayStatus: policyDisplayStatus(backendStatus, expiryDate),
     premiumPaid: readString(record.premiumPaid, record.premium_paid) || undefined,
     currency: readString(record.currency) || undefined,
+    insuredName:
+      readString(
+        record.insuredName,
+        record.insured_name,
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || undefined,
+    customerName:
+      readString(
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || undefined,
   };
 }
 
