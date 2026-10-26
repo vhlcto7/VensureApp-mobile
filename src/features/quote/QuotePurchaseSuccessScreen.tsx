@@ -23,8 +23,8 @@ type QuotePurchaseSuccessScreenProps = {
   navigation: {
     goBack: () => void;
     navigate: (
-      name: 'PolicyDetails' | 'CustomerTabs',
-      params?: { policyId?: string; screen?: string },
+      name: 'PolicyDetails' | 'Home' | 'Policies',
+      params?: { policyId?: string },
     ) => void;
   };
   route: {
@@ -90,7 +90,7 @@ export function QuotePurchaseSuccessScreen({ navigation, route }: QuotePurchaseS
 
   return (
     <View style={styles.root}>
-      <DetailHeader title="Payment successful" onBack={() => navigation.navigate('CustomerTabs')} />
+      <DetailHeader title="Payment successful" onBack={() => navigation.navigate('Home')} />
       <ScrollView contentContainerStyle={styles.content}>
         {loading ? <LoadingIndicator /> : null}
         {error ? (

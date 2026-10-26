@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { Button, Card, Checkbox, ErrorMessage, LoadingIndicator } from '../../components';
+import { Button, Card, Checkbox, ErrorMessage, Input, LoadingIndicator } from '../../components';
 import {
   fetchCustomerDocumentFile,
   type CustomerDocumentFile,
 } from '../../services/customer-documents';
 import {
   claimCustomerQuote,
+  confirmCustomerInsuredName,
   getCustomerPaymentSettings,
   getQuotePurchaseSummary,
   type CustomerPaymentSettings,
@@ -67,6 +68,9 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
   const [summary, setSummary] = useState<QuotePurchaseSummary | null>(null);
   const [settings, setSettings] = useState<CustomerPaymentSettings | null>(null);
   const [method, setMethod] = useState<'MOBILE_MONEY' | 'CARD'>('MOBILE_MONEY');
+  const [insuredName, setInsuredName] = useState('');
+  const [insuredNameConfirmed, setInsuredNameConfirmed] = useState(false);
+  const [insuredNameError, setInsuredNameError] = useState('');
   const [openingDoc, setOpeningDoc] = useState('');
   const [preview, setPreview] = useState<CustomerDocumentFile | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -99,6 +103,16 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
       await claimCustomerQuote(quoteId);
       const nextSummary = await getQuotePurchaseSummary(quoteId);
       setSummary(nextSummary);
+      const nextInsuredName = (
+        nextSummary.quote.insuredName ||
+        nextSummary.quote.customerName ||
+        session?.user.fullName ||
+        form?.contact.fullName ||
+        ''
+      ).trim();
+      setInsuredName(nextInsuredName);
+      setInsuredNameConfirmed(Boolean(nextSummary.quote.insuredNameConfirmed));
+      setInsuredNameError('');
       if (
         guestQuote?.insurancePremium !== undefined &&
         nextSummary.quote.premium !== undefined &&
@@ -111,7 +125,13 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
     } finally {
       setLoading(false);
     }
-  }, [guestQuote?.insurancePremium, quoteId, session?.user]);
+  }, [
+    form?.contact.fullName,
+    guestQuote?.insurancePremium,
+    quoteId,
+    session?.user,
+    session?.user.fullName,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -259,9 +279,42 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
       return;
     }
 
+    const normalizedInsuredName = insuredName.trim().replace(/\s+/g, ' ');
+    if (!normalizedInsuredName || normalizedInsuredName.length < 2) {
+      paymentStartInFlightRef.current = false;
+      setInsuredNameError('Insured Name cannot be blank.');
+      setError('Please confirm the Insured Name before proceeding with payment.');
+      return;
+    }
+    if (!insuredNameConfirmed) {
+      paymentStartInFlightRef.current = false;
+      setInsuredNameError('Please confirm the Insured Name before proceeding with payment.');
+      setError('Please confirm the Insured Name before proceeding with payment.');
+      return;
+    }
+
     setPaying(true);
     setError('');
+    setInsuredNameError('');
     try {
+      try {
+        const confirmation = await confirmCustomerInsuredName(quoteId, normalizedInsuredName);
+        setInsuredName(confirmation.insuredName);
+        setInsuredNameConfirmed(true);
+      } catch (confirmError) {
+        const confirmMessage = getErrorMessage(
+          confirmError,
+          'Please confirm the Insured Name before proceeding with payment.',
+        );
+        const confirmationLocked =
+          /payment has been initiated/i.test(confirmMessage) ||
+          /payment has been completed/i.test(confirmMessage) ||
+          /policy has been issued/i.test(confirmMessage);
+        if (!confirmationLocked) {
+          throw confirmError;
+        }
+      }
+
       const checkout = await createGeePayCheckoutSession({
         quoteId,
         paymentMethod: method,
@@ -315,6 +368,33 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
           </View>
           <Text style={styles.premium}>{formatCustomerMoney(premium, currency) || guestQuote?.premiumLabel}</Text>
           <Text style={styles.premiumHint}>Insurance Premium</Text>
+          {session?.user ? (
+            <View style={styles.insuredBlock}>
+              <Input
+                label="Insured Name"
+                value={insuredName}
+                autoCapitalize="words"
+                autoComplete="name"
+                editable={!paying}
+                error={insuredNameError}
+                onChangeText={(value) => {
+                  setInsuredName(value);
+                  setInsuredNameConfirmed(false);
+                  setInsuredNameError('');
+                }}
+              />
+              <Text style={styles.helper}>Shown on your insurance certificate.</Text>
+              <Checkbox
+                label="I confirm this insured name is correct."
+                checked={insuredNameConfirmed}
+                onPress={() => {
+                  if (!insuredName.trim() || paying) return;
+                  setInsuredNameConfirmed((value) => !value);
+                  setInsuredNameError('');
+                }}
+              />
+            </View>
+          ) : null}
           <DetailRow label="Registration" value={registration} />
           <DetailRow label="Vehicle" value={vehicle || undefined} />
           <DetailRow label="Cover type" value={formatEnumLabel(coverType)} />
@@ -450,7 +530,11 @@ export function QuoteReviewScreen({ navigation, route }: QuoteReviewScreenProps)
           }
           variant="cta"
           loading={paying}
-          disabled={Boolean(amountError) || paying}
+          disabled={
+            Boolean(amountError) ||
+            paying ||
+            (Boolean(session?.user) && (!insuredName.trim() || !insuredNameConfirmed))
+          }
           onPress={() => void startPayment()}
         />
       </ScrollView>
@@ -496,6 +580,10 @@ const styles = StyleSheet.create({
   helper: {
     ...typography.caption,
     color: colors.slate500,
+  },
+  insuredBlock: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   methodHint: {
     marginBottom: spacing.sm,

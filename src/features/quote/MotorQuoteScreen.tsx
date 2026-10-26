@@ -159,6 +159,8 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
   const [productsLoading, setProductsLoading] = useState(true);
   const [hasExplicitCoverPeriodModeSelection, setHasExplicitCoverPeriodModeSelection] =
     useState(false);
+  const [hasExplicitAnniversaryQuarterSelection, setHasExplicitAnniversaryQuarterSelection] =
+    useState(false);
   const [showSavedPicker, setShowSavedPicker] = useState(false);
   const [savedVehicles, setSavedVehicles] = useState<CustomerVehicleRecord[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(() => Boolean(session?.user));
@@ -284,7 +286,6 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
   useEffect(() => {
     if (
       values.coverage.coverPeriodMode !== 'ALIGN_WITH_ROAD_TAX' ||
-      !coverPeriodDetails.usingAnniversaryAlignment ||
       !coverPeriodDetails.anniversaryOptions
     ) {
       return;
@@ -300,7 +301,17 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
       'QUARTER5',
     ].includes(currentDuration || '');
 
-    if (isValidAnniversaryQuarter) {
+    // Keep a valid user-chosen anniversary quarter; otherwise default to the
+    // quarter that aligns with the current RTSA expiry.
+    if (
+      hasExplicitAnniversaryQuarterSelection &&
+      isValidAnniversaryQuarter &&
+      currentDuration !== defaultQuarter
+    ) {
+      return;
+    }
+
+    if (currentDuration === defaultQuarter) {
       return;
     }
 
@@ -313,23 +324,29 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     }));
   }, [
     coverPeriodDetails.anniversaryOptions,
-    coverPeriodDetails.usingAnniversaryAlignment,
+    hasExplicitAnniversaryQuarterSelection,
     values.coverage.coverPeriodMode,
     values.coverage.policyDuration,
   ]);
 
   const matchedProducts = products.filter((product) => matchesSelectedCoverage(product, values));
   const coverTypeOptions = useMemo(() => {
-    const available = coverTypesFromMotorProducts(products);
+    const available = coverTypesFromMotorProducts(products, {
+      policyProductType: values.coverage.policyProductType || undefined,
+    });
     if (available.length === 0) {
-      return [{ label: 'Third Party', value: 'THIRD_PARTY' as const }];
+      return [];
     }
     return available.map((coverType) => ({ label: coverType.label, value: coverType.code }));
-  }, [products]);
+  }, [products, values.coverage.policyProductType]);
   useEffect(() => {
+    if (coverTypeOptions.length === 0) {
+      return;
+    }
     const allowed = new Set(coverTypeOptions.map((option) => option.value));
     if (values.coverage.coverType && !allowed.has(values.coverage.coverType)) {
-      const fallback = coverTypeOptions[0]?.value ?? 'THIRD_PARTY';
+      const fallback = coverTypeOptions[0]?.value;
+      if (!fallback) return;
       setValues((current) => ({
         ...current,
         coverage: {
@@ -598,7 +615,18 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
     field: K,
     value: MotorQuoteFormData['coverage'][K],
   ) => {
-    if (field === 'coverPeriodMode') setHasExplicitCoverPeriodModeSelection(true);
+    if (field === 'coverPeriodMode') {
+      setHasExplicitCoverPeriodModeSelection(true);
+      if (value === 'ALIGN_WITH_ROAD_TAX') {
+        setHasExplicitAnniversaryQuarterSelection(false);
+      }
+    }
+    if (field === 'policyDuration') {
+      setHasExplicitAnniversaryQuarterSelection(true);
+    }
+    if (field === 'preferredStartDate') {
+      setHasExplicitAnniversaryQuarterSelection(false);
+    }
     setValues((current) => {
       const policyProductTypeChanged =
         field === 'policyProductType' && current.coverage.policyProductType !== value;
@@ -1220,6 +1248,7 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                 error={errors.email}
                 autoCapitalize="none"
                 keyboardType="email-address"
+                editable={!session?.user}
                 onChangeText={(value) =>
                   setValues((current) => ({
                     ...current,
@@ -1231,6 +1260,7 @@ export function MotorQuoteScreen({ navigation }: MotorQuoteScreenProps) {
                 label="Phone number"
                 value={values.contact.phone}
                 error={errors.phone}
+                editable={!session?.user}
                 onChangeText={(value) =>
                   setValues((current) => ({
                     ...current,

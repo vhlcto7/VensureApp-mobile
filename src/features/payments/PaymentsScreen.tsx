@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Button, ErrorMessage, ScreenContainer } from '../../components';
-import type { CustomerTabScreenProps } from '../../navigation/types';
+import type { CustomerStackScreenProps } from '../../navigation/types';
 import {
   listCustomerTransactions,
   type CoverTypeFilter,
@@ -24,7 +24,7 @@ import { useDebouncedValue } from '../customer-lists/useDebouncedValue';
 import { usePagedList } from '../customer-lists/usePagedList';
 import { useAvailableMotorCoverTypes } from '../quote/useAvailableMotorCoverTypes';
 
-type PaymentsScreenProps = CustomerTabScreenProps<'Payments'>;
+type PaymentsScreenProps = CustomerStackScreenProps<'PaymentsRoot'>;
 type PaymentChip = 'all' | 'successful' | 'pending' | 'failed';
 type PaymentSort = 'newest' | 'oldest' | 'highest' | 'lowest';
 

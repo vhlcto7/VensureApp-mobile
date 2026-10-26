@@ -1,9 +1,12 @@
-import { useEffect, type ComponentProps } from 'react';
+import { useEffect, type ComponentProps, type ComponentType } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator, type NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationProp,
+} from '@react-navigation/native-stack';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -44,7 +47,41 @@ const TAB_ICONS: Record<
   Profile: { default: 'person-outline', focused: 'person' },
 };
 
-function CustomerTabsWithPurchaseResume() {
+const stackScreenOptions = {
+  headerShown: false,
+  animation: 'slide_from_right' as const,
+};
+
+type TabRootName =
+  | 'HomeRoot'
+  | 'QuotesRoot'
+  | 'PoliciesRoot'
+  | 'PaymentsRoot'
+  | 'ProfileRoot';
+
+function createTabStack(initialRouteName: TabRootName, RootScreen: ComponentType<any>) {
+  return function TabStackNavigator() {
+    return (
+      <Stack.Navigator initialRouteName={initialRouteName} screenOptions={stackScreenOptions}>
+        <Stack.Screen name={initialRouteName} component={RootScreen} />
+        <Stack.Screen name="Vehicles" component={VehiclesScreen} />
+        <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
+        <Stack.Screen name="VehicleAdd" component={VehicleAddScreen} />
+        <Stack.Screen name="MotorQuote" component={MotorQuoteScreen} />
+        <Stack.Screen name="QuoteResults" component={QuoteResultsScreen} />
+        <Stack.Screen name="QuoteDetails" component={QuoteDetailsScreen} />
+        <Stack.Screen name="QuoteReview" component={QuoteReviewScreen} />
+        <Stack.Screen name="QuotePayment" component={QuotePaymentScreen} />
+        <Stack.Screen name="QuotePurchaseSuccess" component={QuotePurchaseSuccessScreen} />
+        <Stack.Screen name="CustomerQuoteDetails" component={CustomerQuoteDetailsScreen} />
+        <Stack.Screen name="PolicyDetails" component={PolicyDetailsScreen} />
+        <Stack.Screen name="PaymentDetails" component={PaymentDetailsScreen} />
+      </Stack.Navigator>
+    );
+  };
+}
+
+function HomeRootWithPurchaseResume(props: ComponentProps<typeof CustomerHomeScreen>) {
   const navigation = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
   const { session } = useAuth();
 
@@ -70,10 +107,16 @@ function CustomerTabsWithPurchaseResume() {
     };
   }, [navigation, session?.user.id]);
 
-  return <CustomerTabs />;
+  return <CustomerHomeScreen {...props} />;
 }
 
-function CustomerTabs() {
+const HomeStack = createTabStack('HomeRoot', HomeRootWithPurchaseResume);
+const QuotesStack = createTabStack('QuotesRoot', QuotesScreen);
+const PoliciesStack = createTabStack('PoliciesRoot', PoliciesScreen);
+const PaymentsStack = createTabStack('PaymentsRoot', PaymentsScreen);
+const ProfileStack = createTabStack('ProfileRoot', ProfileScreen);
+
+export function CustomerNavigator() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 8);
 
@@ -113,37 +156,11 @@ function CustomerTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={CustomerHomeScreen} />
-      <Tab.Screen name="Quotes" component={QuotesScreen} />
-      <Tab.Screen name="Policies" component={PoliciesScreen} />
-      <Tab.Screen name="Payments" component={PaymentsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen name="Quotes" component={QuotesStack} />
+      <Tab.Screen name="Policies" component={PoliciesStack} />
+      <Tab.Screen name="Payments" component={PaymentsStack} />
+      <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
-  );
-}
-
-export function CustomerNavigator() {
-  return (
-    <Stack.Navigator
-      initialRouteName="CustomerTabs"
-      screenOptions={{
-        headerShown: false,
-        animation: 'slide_from_right',
-      }}
-    >
-      <Stack.Screen name="CustomerTabs" component={CustomerTabsWithPurchaseResume} />
-      <Stack.Screen name="Vehicles" component={VehiclesScreen} />
-      <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
-      <Stack.Screen name="VehicleAdd" component={VehicleAddScreen} />
-      <Stack.Screen name="MotorQuote" component={MotorQuoteScreen} />
-      <Stack.Screen name="QuoteResults" component={QuoteResultsScreen} />
-      <Stack.Screen name="QuoteDetails" component={QuoteDetailsScreen} />
-      <Stack.Screen name="QuoteReview" component={QuoteReviewScreen} />
-      <Stack.Screen name="QuotePayment" component={QuotePaymentScreen} />
-      <Stack.Screen name="QuotePurchaseSuccess" component={QuotePurchaseSuccessScreen} />
-      <Stack.Screen name="CustomerQuoteDetails" component={CustomerQuoteDetailsScreen} />
-      <Stack.Screen name="PolicyDetails" component={PolicyDetailsScreen} />
-      <Stack.Screen name="PaymentDetails" component={PaymentDetailsScreen} />
-    </Stack.Navigator>
   );
 }

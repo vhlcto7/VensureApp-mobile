@@ -142,6 +142,10 @@ export function PolicyDetailsScreen({ navigation, route }: Props) {
                 <StatusBadge label={policy.displayStatus} tone={policyStatusTone(policy.displayStatus)} />
               </View>
               <DetailRow label="Policy number" value={policy.policyNumber} />
+              <DetailRow
+                label="Insured Name"
+                value={policy.insuredName || policy.customerName}
+              />
               <DetailRow label="Registration" value={policy.vehicleRegistrationNumber} />
               <DetailRow label="Vehicle Details" value={policy.vehicleDetails} />
              

@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Button, Card, ErrorMessage, ScreenContainer } from '../../components';
 import { BrandLogo } from '../../components/BrandLogo';
 import { ROAD_TAX_URL } from '../../constants/external-links';
-import type { CustomerTabScreenProps } from '../../navigation/types';
+import type { CustomerStackScreenProps } from '../../navigation/types';
 import { getCustomerDashboard } from '../../services/customer-dashboard';
 import { useAuth } from '../../store/auth-context';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -28,7 +28,7 @@ import {
 } from './helpers';
 import type { CustomerDashboardData, CustomerPolicyStatus } from './types';
 
-type CustomerHomeScreenProps = CustomerTabScreenProps<'Home'>;
+type CustomerHomeScreenProps = CustomerStackScreenProps<'HomeRoot'>;
 
 const RTSA_LOGO = require('../../../assets/logo/rtsa-logo.jpg');
 

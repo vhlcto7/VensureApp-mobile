@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button, ErrorMessage, ScreenContainer } from '../../components';
-import type { CustomerTabScreenProps } from '../../navigation/types';
+import type { CustomerStackScreenProps } from '../../navigation/types';
 import {
   listCustomerQuotes,
   type CoverTypeFilter,
@@ -26,7 +26,7 @@ import { useDebouncedValue } from '../customer-lists/useDebouncedValue';
 import { usePagedList } from '../customer-lists/usePagedList';
 import { useAvailableMotorCoverTypes } from '../quote/useAvailableMotorCoverTypes';
 
-type QuotesScreenProps = CustomerTabScreenProps<'Quotes'>;
+type QuotesScreenProps = CustomerStackScreenProps<'QuotesRoot'>;
 type QuoteChip = 'all' | 'recent' | CoverTypeFilter;
 
 const STATUS_OPTIONS: Array<{ id: '' | QuoteFilterStatus; label: string }> = [

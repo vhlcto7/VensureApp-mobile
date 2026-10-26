@@ -90,6 +90,9 @@ export type CustomerQuoteRecord = {
   endDate?: string;
   policyId?: string;
   logoUrl?: string;
+  insuredName?: string | null;
+  insuredNameConfirmed?: boolean;
+  customerName?: string | null;
 };
 
 export type QuoteProductDocument = {
@@ -142,6 +145,8 @@ export type CustomerPolicyRecord = {
   displayStatus: CustomerPolicyStatus;
   premiumPaid?: string;
   currency?: string;
+  insuredName?: string;
+  customerName?: string;
 };
 
 export type CustomerPolicyDocument = {
@@ -416,6 +421,26 @@ export async function claimCustomerQuote(quoteId: string): Promise<{ quoteId: st
   const nested = asRecord(record.data);
   const source = nested.quoteId || nested.id ? nested : record;
   return { quoteId: readString(source.quoteId, source.id) || quoteId };
+}
+
+export async function confirmCustomerInsuredName(
+  quoteId: string,
+  fullName: string,
+): Promise<{ quoteId: string; insuredName: string; confirmed: boolean; confirmedAt: string | null }> {
+  assertApiConfigured();
+  const { data } = await apiClient.post(`/customer/quotes/${quoteId}/confirm-insured-name`, {
+    fullName,
+    confirmed: true,
+  });
+  const record = asRecord(data);
+  const nested = asRecord(record.data);
+  const source = nested.quoteId || nested.insuredName || nested.confirmedAt ? nested : record;
+  return {
+    quoteId: readString(source.quoteId, source.id) || quoteId,
+    insuredName: readString(source.insuredName, source.insured_name, fullName) || fullName,
+    confirmed: source.confirmed === true,
+    confirmedAt: readString(source.confirmedAt, source.confirmed_at) || null,
+  };
 }
 
 export async function getQuotePurchaseSummary(quoteId: string): Promise<QuotePurchaseSummary> {
@@ -710,6 +735,22 @@ function mapQuote(item: unknown): CustomerQuoteRecord {
     startDate: readString(record.startDate, record.start_date) || undefined,
     endDate: readString(record.endDate, record.end_date, record.validUntil) || undefined,
     policyId: readString(record.policyId, record.policy_id) || undefined,
+    insuredName:
+      readString(
+        record.insuredName,
+        record.insured_name,
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || null,
+    insuredNameConfirmed:
+      record.insuredNameConfirmed === true || record.insured_name_confirmed === true,
+    customerName:
+      readString(
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || null,
   };
 }
 
@@ -842,6 +883,20 @@ function mapPolicy(item: unknown): CustomerPolicyRecord {
     displayStatus: policyDisplayStatus(backendStatus, expiryDate),
     premiumPaid: readString(record.premiumPaid, record.premium_paid) || undefined,
     currency: readString(record.currency) || undefined,
+    insuredName:
+      readString(
+        record.insuredName,
+        record.insured_name,
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || undefined,
+    customerName:
+      readString(
+        record.customerName,
+        record.customer_name,
+        asRecord(record.customer).fullName,
+      ) || undefined,
   };
 }
 

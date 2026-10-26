@@ -10,7 +10,7 @@ import {
   VENSURE_PRIVACY_POLICY_URL,
   VENSURE_TERMS_URL,
 } from '../../constants/legal-urls';
-import type { CustomerTabScreenProps } from '../../navigation/types';
+import type { CustomerStackScreenProps } from '../../navigation/types';
 import { getCustomerSignupConsents } from '../../services/customer-auth';
 import { getCustomerProfile } from '../../services/customer-profile';
 import { useAuth } from '../../store/auth-context';
@@ -37,7 +37,7 @@ type ProfileActionTileProps = {
   onPress: () => void;
 };
 
-export function ProfileScreen(_props: CustomerTabScreenProps<'Profile'>) {
+export function ProfileScreen(_props: CustomerStackScreenProps<'ProfileRoot'>) {
   const { session, signOut, updateSessionUser } = useAuth();
   const [profile, setProfile] = useState<CustomerProfileRecord | null>(null);
   const [loading, setLoading] = useState(true);

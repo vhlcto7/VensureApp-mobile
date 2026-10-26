@@ -297,13 +297,20 @@ export type MotorCoverTypeOption = {
   label: string;
 };
 
-export function coverTypesFromMotorProducts(products: MotorProduct[]): MotorCoverTypeOption[] {
+export function coverTypesFromMotorProducts(
+  products: MotorProduct[],
+  options?: { policyProductType?: string },
+): MotorCoverTypeOption[] {
   const labels: Record<MotorCoverTypeOption['code'], string> = {
     THIRD_PARTY: 'Third Party',
     COMPREHENSIVE: 'Comprehensive',
   };
+  const selectedUse = options?.policyProductType?.trim();
   const seen = new Set<MotorCoverTypeOption['code']>();
   for (const product of products) {
+    if (selectedUse && product.policyProductType !== selectedUse) {
+      continue;
+    }
     const code = product.coverageType?.toUpperCase();
     if (code === 'THIRD_PARTY' || code === 'COMPREHENSIVE') seen.add(code);
   }
